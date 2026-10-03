@@ -34,3 +34,7 @@ Supersedes the earlier 50Hz/25Hz decision: simulation and authoritative snapshot
 ## Gameplay pace and arena tuning from user feedback
 
 User supplied a Curve Crash trailer screenshot and reported excessive speed and a cramped map. Set base speed to 72 units/s (20% below 90). Arena width becomes round(max(600, 900 × sqrt(players / 8))), replacing 720 × sqrt(players / 8). Two-player width grows from 360 to 600; eight-player width grows from 720 to 900. Preserve 35-unit turning radius, 5-unit trails, and 60Hz timing. This is a Curvey tuning choice, not a measured reference speed: a still screenshot cannot establish motion timing. Ruleset v3 / protocol v4 require refreshed clients.
+
+## 2026-10-03: arena presence and pace refinement
+
+Increase base speed from 72 to 78 units/s after play feedback that the enlarged world feels slightly slow. Preserve the 35-unit turning radius, so angular response scales with movement speed and authority/prediction remain on the same shared step. Increase the desktop arena's viewport cap by 60px while preserving its square aspect ratio and existing responsive rail collapse. Ruleset v4 uses the existing protocol v4; refresh clients and start new rooms after deployment.

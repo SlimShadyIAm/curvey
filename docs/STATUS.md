@@ -16,7 +16,7 @@ Implemented:
 - Name/color preferences and key remapping, keyboard controls/blur release, reduced-motion styling, responsive entry/lobby, actionable error states.
 - Compiled server serves compiled web assets and supports same-origin connections.
 - Production multi-stage Docker image and Compose service: frozen-lockfile build, production dependency deploy, non-root/read-only runtime, loopback-only published port, and HTTP health check.
-- Local Git repository initialized on the `main` branch; no commits or remotes have been created.
+- Git repository initialized on `main` and tracking its configured GitHub remote.
 
 ## Verification
 
@@ -25,6 +25,7 @@ Implemented:
 - `corepack pnpm build`: passed for web and compiled server. Pixi is loaded only when needed; initial bundle is approximately 470kB minified / 145kB gzip. Upstream Zod PURE-annotation warnings remain non-blocking.
 - Docker configuration was added and its Compose model was validated. Formatting, typecheck, all 16 unit tests, and the production build passed. A full image build was attempted but could not run because the local Docker daemon was unavailable; image assembly and its health check remain to be verified on a Docker host.
 - Docker dependency assembly no longer uses pnpm's legacy `deploy`, which re-resolved Colyseus's unused optional uWebSockets transport and failed in the slim image because Git was absent. A frozen-lockfile, production-only dependency stage now supplies the runtime tree without that second resolution; VPS image rebuild verification is pending.
+- Arena/pace refinement verification: formatting, typecheck, all 16 unit tests, production build, and all three two-browser game/responsive scenarios passed. The 1440×1000 live-match screenshot was inspected: the 60px larger square remains fully visible with its heading and controls, and does not overlap the room rail or footer.
 - Clock-fix verification: all 6 integration tests passed including compiled-server smoke. Gameplay-tuning verification: unit tests, typecheck and build passed; 5 integration checks passed; the optional compiled-server smoke was skipped on this rerun. Arena screenshot inspected. Timing remained 60.22 ticks/s with 2.99s / 5.01s countdowns.
 - Browser scenarios: two independent contexts create/join, exchange chat, ready/start, render actual canvases, steer, process departure scoring, transfer host; late arrival has no canvas; host kick displays the correct reason; invalid invite feedback; production build creates a room.
 - Screenshots inspected at 1440×1000, 1024×768 and 390×844: entry, live match and responsive layout. Corrected desktop arena height to keep the field visible. No horizontal overflow on narrow entry screen. Desktop full-page content may scroll, but the live field fits its viewport.
@@ -32,7 +33,7 @@ Implemented:
 
 ## Current gameplay tuning
 
-User feedback and a supplied reference screenshot prompted a slower pace and larger world: speed 72 units/s (down 20%), minimum map width 600 (previous two-player width 360), eight-player width 900 (previous 720). Two-player empty-field crossing time is now about 8.3 seconds versus 4 seconds. Turn radius and trail thickness in world units remain unchanged; trails appear finer relative to the enlarged field. This tuning is not a measured reference-speed match. Refresh all players and start a new room for protocol v4 / ruleset v3.
+The larger world remains: minimum map width 600 and eight-player width 900. Follow-up play feedback increased base speed slightly from 72 to 78 units/s, reducing the two-player empty-field crossing time from about 8.3 to 7.7 seconds. Turn radius and trail thickness remain unchanged. The desktop arena viewport cap is 60px larger while retaining its square aspect ratio and responsive layout. This tuning is not a measured reference-speed match. Refresh all players and start a new room for protocol v4 / ruleset v4.
 
 ## Clock correction and 60Hz
 
@@ -66,4 +67,4 @@ With an artificial 100ms delay in each network direction, the Chromium diagnosti
 - Gap immunity keeps walls solid provisionally. Do not claim exact Curve Crash parity.
 - Auto reconnect code exists, but abrupt-network recovery has not been browser-tested; full refresh does not restore the guest seat.
 - Full match-to-target/rematch endurance, context-loss recovery, screen-reader behavior and cross-browser coverage remain unverified.
-- No database, hosted service, deployment credentials, production rate/backpressure hardening, or operational performance claims. Git is initialized locally, but there are no commits or configured remotes yet.
+- No database, hosted service, deployment credentials, production rate/backpressure hardening, or operational performance claims.

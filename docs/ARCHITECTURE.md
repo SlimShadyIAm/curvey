@@ -15,7 +15,7 @@ Rules and protocol carry versions. Pin a compatible dependency set in the lockfi
 
 ## Simulation
 
-60 ticks/second; tick-based durations and seeded server randomness. Reference baseline: minimum 600-unit field, scaling to 900 units at eight players, 72 units/s speed, 35-unit turn radius. Use a spatial grid and swept geometry; never use endpoint-only collision checks or canvas pixels for authority. Retain full current-round geometry; free it at reset. Resolve equal-time contacts symmetrically, not by player iteration order. Only exempt immediately connected own trail. Width changes affect new geometry only.
+60 ticks/second; tick-based durations and seeded server randomness. Reference baseline: minimum 600-unit field, scaling to 900 units at eight players, 78 units/s speed, 35-unit turn radius. Use a spatial grid and swept geometry; never use endpoint-only collision checks or canvas pixels for authority. Retain full current-round geometry; free it at reset. Resolve equal-time contacts symmetrically, not by player iteration order. Only exempt immediately connected own trail. Width changes affect new geometry only.
 
 Independent effect instances recompute modifiers from base values. Split geometry at gaps, wraps and effect changes. Death wins exact-time ties with pickups. One collector per pickup. Gaps and flying require explicit reference checks before parity claims.
 

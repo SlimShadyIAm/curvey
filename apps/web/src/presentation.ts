@@ -10,7 +10,7 @@ import {
 import type { Baseline, GameView, GeometryBatch, InputCommand, Phase } from '@curvey/protocol';
 
 export const STEP_MS = DT * 1000;
-const MAX_LEAD = 12;
+const MAX_LEAD = 16;
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 export type PredictedPath = { head: Curve; segments: Segment[] };
 
@@ -72,7 +72,11 @@ export class ArenaPresentation {
   private history: GameView[] = [];
   private anchorTick = 0;
   private anchorAt = 0;
+  private clockRate = 1;
+  private remoteAnchorTick = 0;
+  private remoteClockRate = 1;
   private lastCommandTick = 0;
+  private correction = { x: 0, y: 0, angle: 0, at: 0 };
   constructor(readonly localId = '') {}
 
   baseline(baseline: Baseline, now: number) {
@@ -84,18 +88,27 @@ export class ArenaPresentation {
     this.receivedAt = now;
     this.anchorTick = baseline.game.tick;
     this.anchorAt = now;
+    this.clockRate = this.remoteClockRate = 1;
+    this.remoteAnchorTick = baseline.game.tick;
     this.lastCommandTick = 0;
+    this.clearCorrection();
   }
   setPhase(phase: Phase, now: number) {
     if (this.phase === phase) return;
     this.phase = phase;
     this.pending = [];
+    this.clearCorrection();
     this.anchorAt = now;
-    this.anchorTick = (this.game?.tick ?? 0) + (phase === 'playing' ? this.rtt / STEP_MS : 0);
+    this.anchorTick = (this.game?.tick ?? 0) + (phase === 'playing' ? this.lead() : 0);
+    this.remoteAnchorTick = this.game?.tick ?? 0;
+    this.clockRate = this.remoteClockRate = 1;
   }
   setConnected(connected: boolean) {
     this.connected = connected;
-    if (!connected) this.pending = [];
+    if (!connected) {
+      this.pending = [];
+      this.clearCorrection();
+    }
   }
   updateRtt(ms: number) {
     if (ms >= 0 && ms < 2000) this.rtt = this.rtt ? this.rtt * 0.8 + ms * 0.2 : ms;
@@ -103,6 +116,8 @@ export class ArenaPresentation {
   snapshot(game: GameView, now: number) {
     if (game.round !== this.game?.round || game.tick <= this.game.tick) return;
     const oldTarget = this.localTick(now);
+    const oldRemote = this.remoteTick(now);
+    const previousHead = this.local(now)?.head;
     const expectedInterval = (game.tick - this.game.tick) * STEP_MS;
     this.jitter = clamp(
       this.jitter * 0.9 + Math.abs(now - this.receivedAt - expectedInterval) * 0.1,
@@ -114,13 +129,38 @@ export class ArenaPresentation {
     this.history.push(game);
     if (this.history.length > 20) this.history.shift();
     this.pending = this.pending.filter((c) => c.seq > (game.ack[this.localId] ?? -1));
-    const desired = game.tick + this.rtt / STEP_MS;
-    this.anchorTick = clamp(
-      oldTarget + clamp(desired - oldTarget, -0.5, 0.5),
-      game.tick,
-      game.tick + MAX_LEAD,
-    );
+    // Slew the clock rather than jumping the displayed position on every packet.
+    // Keep two ticks free so ordinary packet jitter cannot pin input at the horizon.
+    const desired = game.tick + this.lead();
+    this.anchorTick = clamp(oldTarget, game.tick, game.tick + MAX_LEAD);
+    this.clockRate = 1 + clamp((desired - oldTarget) * 0.02, -0.05, 0.05);
+    this.remoteAnchorTick = oldRemote;
+    this.remoteClockRate =
+      1 + clamp((game.tick - (40 + this.jitter) / STEP_MS - oldRemote) * 0.02, -0.05, 0.05);
     this.anchorAt = now;
+    this.clearCorrection();
+    const nextHead = this.local(now)?.head;
+    if (
+      this.phase === 'playing' &&
+      this.connected &&
+      previousHead?.alive &&
+      nextHead?.alive &&
+      Math.hypot(previousHead.x - nextHead.x, previousHead.y - nextHead.y) <= TRAIL_WIDTH * 2
+    ) {
+      // Only reconcile network corrections. Fresh keyboard intent is never eased.
+      this.correction = {
+        x: previousHead.x - nextHead.x,
+        y: previousHead.y - nextHead.y,
+        angle: previousHead.angle - nextHead.angle,
+        at: now,
+      };
+    }
+  }
+  private clearCorrection() {
+    this.correction = { x: 0, y: 0, angle: 0, at: 0 };
+  }
+  private lead() {
+    return clamp(this.rtt / STEP_MS + 1, 1, MAX_LEAD - 2);
   }
   append(batch: GeometryBatch): boolean {
     if (batch.round !== this.game?.round) return true;
@@ -131,7 +171,7 @@ export class ArenaPresentation {
   localTick(now: number) {
     if (!this.game || this.phase !== 'playing' || !this.connected) return this.game?.tick ?? 0;
     return clamp(
-      this.anchorTick + Math.max(0, now - this.anchorAt) / STEP_MS,
+      this.anchorTick + (Math.max(0, now - this.anchorAt) / STEP_MS) * this.clockRate,
       this.game.tick,
       this.game.tick + MAX_LEAD,
     );
@@ -154,13 +194,33 @@ export class ArenaPresentation {
   local(now: number): PredictedPath | null {
     const base = this.game?.players.find((p) => p.id === this.localId);
     if (!base || !this.game) return null;
-    return predictPath(base, this.game.tick, this.localTick(now), this.pending);
+    const path = predictPath(base, this.game.tick, this.localTick(now), this.pending);
+    if (!base.alive || !this.connected || this.phase !== 'playing') return path;
+    const decay = Math.exp(-Math.max(0, now - this.correction.at) / 60);
+    const dx = this.correction.x * decay,
+      dy = this.correction.y * decay;
+    const distance = path.head.distance - base.distance;
+    // Blend from the exact confirmed endpoint to the corrected head. Never move
+    // cached authority or bridge gaps; only the speculative tip bends slightly.
+    for (const segment of path.segments) {
+      const length = Math.hypot(segment.x2 - segment.x1, segment.y2 - segment.y1);
+      const end = clamp((segment.distanceEnd - base.distance) / (distance || 1), 0, 1);
+      const start = clamp((segment.distanceEnd - length - base.distance) / (distance || 1), 0, 1);
+      segment.x1 += dx * start;
+      segment.y1 += dy * start;
+      segment.x2 += dx * end;
+      segment.y2 += dy * end;
+    }
+    path.head.x += dx;
+    path.head.y += dy;
+    path.head.angle += this.correction.angle * decay;
+    return path;
   }
   remoteTick(now: number) {
     if (!this.game) return 0;
     if (this.phase !== 'playing' || !this.connected) return this.game.tick;
     return clamp(
-      this.anchorTick + (now - this.anchorAt - this.rtt - 40 - this.jitter) / STEP_MS,
+      this.remoteAnchorTick + (Math.max(0, now - this.anchorAt) / STEP_MS) * this.remoteClockRate,
       this.history[0]?.tick ?? 0,
       this.game.tick + 2,
     );

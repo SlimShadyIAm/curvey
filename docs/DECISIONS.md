@@ -38,3 +38,15 @@ User supplied a Curve Crash trailer screenshot and reported excessive speed and 
 ## 2026-10-03: arena presence and pace refinement
 
 Increase base speed from 72 to 78 units/s after play feedback that the enlarged world feels slightly slow. Preserve the 35-unit turning radius, so angular response scales with movement speed and authority/prediction remain on the same shared step. Increase the desktop arena's viewport cap by 60px while preserving its square aspect ratio and existing responsive rail collapse. Ruleset v4 uses the existing protocol v4; refresh clients and start new rooms after deployment.
+
+## 2026-10-03: continuous presentation clocks
+
+Replace per-snapshot half-tick display-clock jumps with bounded ±5% clock-rate correction. Give remote presentation its own clock so RTT samples cannot move it abruptly. Increase client prediction to 16 ticks (267ms), targeting RTT plus one tick with two ticks of remaining headroom; the previous 12-tick cap saturated at 200ms RTT and delayed new steering until another snapshot. Server input scheduling stays bounded to its next 12 ticks; authority and protocol are unchanged. Long stalls still freeze at the prediction limit, and authoritative corrections may still move a head.
+
+## 2026-10-03: faster play and full-width rooms
+
+User requested two successive 10% speed increases and a larger arena occupying the right side. Set speed to 94.38 units/s (78 × 1.1 × 1.1) with the existing turn radius; ruleset v5. Expand desktop rooms to the window edges with 24px insets, compact the header to 48px, and fit the largest square up to viewport height minus 132px beside the room rail. Preserve the world dimensions and mobile/entry layout. Refresh clients and restart rooms after deploying the matching server/client build.
+
+## 2026-10-03: direction preview and reconciliation smoothing
+
+Protocol v5 adds a server-timed two-second stationary direction preview after the three-second countdown, before movement starts. Show each player an arrow aligned to their authoritative spawn angle. Chat and input stay disabled during the preview. Smooth small network corrections with a 60ms decay, blending only the speculative tip from exact confirmed geometry to the corrected head. Keep new steering immediate and authoritative death/large corrections exact.

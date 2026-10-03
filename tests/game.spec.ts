@@ -30,6 +30,9 @@ test('invite-only two-browser match, chat, disconnect and host transfer', async 
   await expect(page.locator('canvas')).toBeVisible();
   await expect(friend.locator('canvas')).toBeVisible();
   await expect(page.locator('.countdown-overlay')).toHaveCount(0);
+  await expect(page.locator('.direction-preview-status')).toBeVisible();
+  await page.screenshot({ path: 'test-results/direction-preview.png', fullPage: true });
+  await expect(page.locator('.direction-preview-status')).toHaveCount(0);
   await expect(page.getByLabel('Chat message')).toBeDisabled();
   await expect
     .poll(() =>
@@ -42,6 +45,25 @@ test('invite-only two-browser match, chat, disconnect and host transfer', async 
   await page.waitForTimeout(300);
   await page.keyboard.up('ArrowLeft');
   await page.screenshot({ path: 'test-results/match-desktop.png', fullPage: true });
+  for (const viewport of [
+    { width: 2000, height: 1250 },
+    { width: 1024, height: 768 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect
+      .poll(() =>
+        page.locator('.arena-frame').evaluate((el) => {
+          const rect = el.getBoundingClientRect();
+          return (
+            rect.bottom <= innerHeight &&
+            Math.abs(rect.width - rect.height) < 2 &&
+            Math.abs(innerWidth - rect.right - 24) < 2
+          );
+        }),
+      )
+      .toBe(true);
+    await page.screenshot({ path: `test-results/match-${viewport.width}.png`, fullPage: true });
+  }
   // Leaving is an authoritative elimination; the remaining browser receives host ownership.
   await page.getByRole('button', { name: 'Leave room', exact: true }).click();
   await expect(friend.getByRole('heading', { name: 'Bo’s room' })).toBeVisible();

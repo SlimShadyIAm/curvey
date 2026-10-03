@@ -15,13 +15,13 @@ Rules and protocol carry versions. Pin a compatible dependency set in the lockfi
 
 ## Simulation
 
-60 ticks/second; tick-based durations and seeded server randomness. Reference baseline: minimum 600-unit field, scaling to 900 units at eight players, 78 units/s speed, 35-unit turn radius. Use a spatial grid and swept geometry; never use endpoint-only collision checks or canvas pixels for authority. Retain full current-round geometry; free it at reset. Resolve equal-time contacts symmetrically, not by player iteration order. Only exempt immediately connected own trail. Width changes affect new geometry only.
+60 ticks/second; tick-based durations and seeded server randomness. Current baseline: minimum 600-unit field, scaling to 900 units at eight players, 94.38 units/s speed, 35-unit turn radius. Use a spatial grid and swept geometry; never use endpoint-only collision checks or canvas pixels for authority. Retain full current-round geometry; free it at reset. Resolve equal-time contacts symmetrically, not by player iteration order. Only exempt immediately connected own trail. Width changes affect new geometry only.
 
 Independent effect instances recompute modifiers from base values. Split geometry at gaps, wraps and effect changes. Death wins exact-time ties with pickups. One collector per pickup. Gaps and flying require explicit reference checks before parity claims.
 
 ## Networking
 
-Colyseus owns room lifecycle. Server accepts steering intent, never client position/death/score claims. Protocol v4 input carries sequence, round and requested tick IDs; server clamps scheduling to the next 12 ticks and acknowledges applied input. Target updates: 60Hz with 60Hz simulation.
+Colyseus owns room lifecycle. Server accepts steering intent, never client position/death/score claims. Protocol v5 input carries sequence, round and requested tick IDs; server clamps scheduling to the next 12 ticks and acknowledges applied input. Target updates: 60Hz with 60Hz simulation. After the three-second countdown, the server holds a two-second `direction-preview` phase without simulation movement before entering play. Each client draws its own starting-heading arrow from the authoritative spawn.
 
 Separate replaceable head/state snapshots from ordered trail additions/clears/round transitions. Colyseus property patches only preserve the latest mutation, so interpolated head snapshots cannot reconstruct collision trails. Baselines and deltas carry round and sequence IDs. Keep predicted local trail separate from confirmed geometry; authority finalizes death/pickups/scores. No world rollback in v1.
 
@@ -37,4 +37,6 @@ Guests and rooms are in memory; preferences local to browser. Random invite capa
 
 ## Current prediction and presentation
 
-The None-mode client shares `movementStep` with the authoritative simulation. It predicts unacknowledged local commands to a fractional render tick, rebases on snapshots, and removes commands only when acknowledged as applied. Prediction never decides collisions or score. RTT sampling establishes the local lead; the prediction horizon is bounded at 200ms. Remote heads and tick-stamped trail tips use buffered history with a jitter allowance and at most 33.3ms extrapolation. Disconnects freeze presentation; phase/round changes reset prediction. Future effects must extend both authoritative movement and presentation before enabling their presets.
+Small local reconciliation errors (within two trail widths) decay with a 60ms time constant. Only speculative tip geometry blends between the confirmed endpoint and corrected head; cached collision geometry stays exact. Fresh keyboard commands are not eased. Death, disconnect, phase changes and baseline replacement bypass or clear correction; larger corrections snap to authority.
+
+The None-mode client shares `movementStep` with the authoritative simulation. It predicts unacknowledged local commands to a fractional render tick, rebases on snapshots, and removes commands only when acknowledged as applied. Prediction never decides collisions or score. RTT sampling establishes the local lead plus one tick of headroom; the prediction horizon is bounded at 16 ticks (267ms), with the target lead capped two ticks below that limit. Local and remote clocks adjust their rates by at most 5% instead of stepping on packet arrivals or RTT changes. Remote heads and tick-stamped trail tips use buffered history with a jitter allowance and at most 33.3ms extrapolation. Disconnects freeze presentation; phase/round changes reset prediction. Future effects must extend both authoritative movement and presentation before enabling their presets.

@@ -150,6 +150,20 @@ export function Arena({
             if (!path) continue;
             for (const segment of path.segments) drawSegment(tips, segment);
             drawHead(path.head);
+            if (player.id === localId && player.alive && current.phase === 'direction-preview') {
+              const { x, y, angle, color } = path.head;
+              const dx = Math.cos(angle),
+                dy = Math.sin(angle);
+              const tipX = x + dx * 44,
+                tipY = y + dy * 44;
+              heads
+                .moveTo(x + dx * 12, y + dy * 12)
+                .lineTo(tipX, tipY)
+                .moveTo(tipX - dx * 10 - dy * 7, tipY - dy * 10 + dx * 7)
+                .lineTo(tipX, tipY)
+                .lineTo(tipX - dx * 10 + dy * 7, tipY - dy * 10 - dx * 7)
+                .stroke({ width: 2.5, color, cap: 'round', join: 'round' });
+            }
             if (player.id === localId)
               local = {
                 x: path.head.x,

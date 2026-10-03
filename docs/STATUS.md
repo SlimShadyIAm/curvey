@@ -21,7 +21,7 @@ Implemented:
 ## Verification
 
 - `corepack pnpm typecheck`: passed.
-- `corepack pnpm test`: 16 engine/geometry/presentation tests passed.
+- Latest unit run: 18 of 19 passed; the gap-boundary assertion still expected the old speed's third tick. Updated it to tick two for 94.38 units/s, without rerunning at the user's request.
 - `corepack pnpm build`: passed for web and compiled server. Pixi is loaded only when needed; initial bundle is approximately 470kB minified / 145kB gzip. Upstream Zod PURE-annotation warnings remain non-blocking.
 - Docker configuration was added and its Compose model was validated. Formatting, typecheck, all 16 unit tests, and the production build passed. A full image build was attempted but could not run because the local Docker daemon was unavailable; image assembly and its health check remain to be verified on a Docker host.
 - Docker dependency assembly no longer uses pnpm's legacy `deploy`, which re-resolved Colyseus's unused optional uWebSockets transport and failed in the slim image because Git was absent. A frozen-lockfile, production-only dependency stage now supplies the runtime tree without that second resolution; VPS image rebuild verification is pending.
@@ -33,7 +33,17 @@ Implemented:
 
 ## Current gameplay tuning
 
-The larger world remains: minimum map width 600 and eight-player width 900. Follow-up play feedback increased base speed slightly from 72 to 78 units/s, reducing the two-player empty-field crossing time from about 8.3 to 7.7 seconds. Turn radius and trail thickness remain unchanged. The desktop arena viewport cap is 60px larger while retaining its square aspect ratio and responsive layout. This tuning is not a measured reference-speed match. Refresh all players and start a new room for protocol v4 / ruleset v4.
+The larger world remains: minimum map width 600 and eight-player width 900. Two successive requested 10% increases take speed from 78 to 94.38 units/s, for a two-player empty-field crossing time of about 6.4 seconds. Turn radius and trail thickness remain unchanged. Desktop rooms now use the full window width with 24px side insets, a 48px header, a 280px room rail, and a square arena capped at viewport height minus 132px. Entry and mobile layouts retain their existing structure. This tuning is not a measured reference-speed match. Refresh all players and start a new room for protocol v5 / ruleset v5.
+
+## Latest responsiveness correction
+
+Snapshot arrivals previously moved the presentation clock by up to half a tick, turning packet jitter into visible movement jitter. Local and remote clocks now correct their rates within ±5% without those per-packet steps. Remote timing is independent of RTT sample changes. Client prediction now allows 16 ticks (267ms), targeting RTT plus one tick and reserving two ticks above the target, so 200ms RTT does not immediately pin new steering at the prediction limit. Server input scheduling and all collision/scoring authority remain unchanged.
+
+Small reconciliation corrections now decay with a 60ms time constant, blending only speculative trail tips between confirmed geometry and the corrected head. New keyboard intent remains immediate; deaths and large corrections remain authoritative.
+
+The three-second countdown now leads into a server-timed two-second stationary direction preview. Each player sees an arrow aligned to their own spawn heading before movement starts. Chat and steering remain disabled until play.
+
+Verification: latest typecheck passed. All five enabled integration tests passed; optional production smoke was skipped. The delayed-network browser run measured 0.6ms to a changed presentation heading, 19.1ms median frame interval and 24.1ms p95; this is browser instrumentation, not physical display latency or a frame-rate guarantee. Authoritative timing measured 59.45Hz with a 2.99s countdown, 1.99s preview and 5.00s results interval. Inspected direction-preview and desktop/laptop arena screenshots; viewport checks passed at 2000×1250 and 1024×768. Nineteen unit tests passed before the final speed increase; the final run passed 18 with one outdated gap-tick expectation, now corrected without rerun. Production build passed before the last reconciliation/speed edits; its final rerun was prevented by that test failure. The user explicitly requested no further tests before pushing. Next verification: rerun units/build when requested, then measure extreme-jitter reconciliation and eight-player load. Long stalls still reach the prediction cap; large corrections can still move a head. Non-Chromium behavior remains unverified.
 
 ## Clock correction and 60Hz
 

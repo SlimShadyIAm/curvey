@@ -1,10 +1,10 @@
 /** Headless, fixed-step rules. No network, wall-clock or browser state belongs here. */
 export const TICK_RATE = 60;
 export const DT = 1 / TICK_RATE;
-export const SPEED = 78;
+export const SPEED = 94.38;
 export const TURN_RADIUS = 35;
 export const TRAIL_WIDTH = 5;
-export const RULESET_VERSION = 4;
+export const RULESET_VERSION = 5;
 export type Steering = -1 | 0 | 1;
 /** Shared by authority and prediction. One fixed movement step, without collision decisions. */
 export function movementStep(angle: number, steer: Steering) {

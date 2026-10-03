@@ -12,7 +12,7 @@ Approved 2026-09-06. PRODUCT is authoritative for scope; ARCHITECTURE for techni
 
 ## Rules selected for Curvey
 
-- Three-second round countdown; five-second round-result interval.
+- Three-second round countdown, then a two-second stationary starting-direction arrow before movement; five-second round-result interval.
 - Alive players gain one point for each opponent eliminated. Same-time deaths are one group, and do not score from one another.
 - Round ends at at most one survivor. A unique leader at/above the target wins the match; tied leaders play on.
 - Default target is 10 × (starting players − 1); host target range 5–300.

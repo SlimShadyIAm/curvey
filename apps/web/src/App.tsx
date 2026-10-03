@@ -325,7 +325,8 @@ export function App() {
   const me = view?.members.find((p) => p.id === room?.sessionId);
   const isHost = view?.host === room?.sessionId;
   const editable = view?.phase === 'lobby' || view?.phase === 'match-results';
-  const active = view?.phase === 'playing' || view?.phase === 'countdown';
+  const active =
+    view?.phase === 'playing' || view?.phase === 'countdown' || view?.phase === 'direction-preview';
   const canStart =
     (view?.members.length ?? 0) >= 2 && view?.members.every((p) => p.ready && p.connected);
   const myCurve = game?.players.find((p) => p.id === room?.sessionId);
@@ -334,7 +335,7 @@ export function App() {
     key.replace('Key', '').replace('ArrowLeft', '←').replace('ArrowRight', '→');
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${view ? ' room-shell' : ''}`}>
       <header className="topbar">
         <a
           className="brand"
@@ -732,7 +733,8 @@ export function App() {
                 ) : (
                   <ArenaPreview />
                 )}
-                {(view.phase !== 'playing' || me?.waiting) && (
+                {((view.phase !== 'playing' && view.phase !== 'direction-preview') ||
+                  me?.waiting) && (
                   <div
                     className={`arena-overlay ${view.phase === 'countdown' ? 'countdown-overlay' : ''}`}
                   >
@@ -785,9 +787,15 @@ export function App() {
                 <span>
                   <kbd>{displayKey(leftKey)}</kbd>
                   <kbd>{displayKey(rightKey)}</kbd>{' '}
-                  {view.phase === 'playing' && myCurve && !myCurve.alive
-                    ? 'You’re out. Watch the finish.'
-                    : 'Your steering controls'}
+                  {view.phase === 'direction-preview' && !me?.waiting ? (
+                    <span className="direction-preview-status" role="status">
+                      Your starting direction. Moving in {view.remaining}s
+                    </span>
+                  ) : view.phase === 'playing' && myCurve && !myCurve.alive ? (
+                    'You’re out. Watch the finish.'
+                  ) : (
+                    'Your steering controls'
+                  )}
                 </span>
                 <span>
                   {game ? `${(game.tick / TICK_RATE).toFixed(1)}s` : 'All trails are lethal.'}

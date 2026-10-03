@@ -903,4 +903,32 @@ kbd {
   .arena-column {
     max-width: calc(100dvh - 220px);
   }
+  .room-shell {
+    max-width: none;
+    padding: 0 24px;
+  }
+  .room-shell .topbar {
+    height: 48px;
+  }
+  .room-shell .brand {
+    font-size: 1.5rem;
+  }
+  .room-shell .workspace {
+    grid-template-columns: 280px minmax(0, 1fr);
+    gap: 24px;
+    padding: 12px 0 0;
+    min-height: calc(100dvh - 48px);
+  }
+  .room-shell .arena-column {
+    max-width: calc(100dvh - 132px);
+  }
+  .room-shell .arena-heading {
+    padding-bottom: 8px;
+  }
+  .room-shell .arena-footer {
+    min-height: 36px;
+  }
+  .room-shell .page-footer {
+    display: none;
+  }
 }

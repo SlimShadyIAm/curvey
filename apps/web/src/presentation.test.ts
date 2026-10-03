@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Match, type Curve } from '@curvey/sim';
 import type { GameView, InputCommand } from '@curvey/protocol';
-import { ArenaPresentation, predictPath } from './presentation';
+import { ArenaPresentation, predictPath, STEP_MS } from './presentation';
 
 const players = [
   { id: 'a', name: 'Ada', color: '#c4ec78' },
@@ -26,6 +26,50 @@ function scene() {
 }
 
 describe('prediction and presentation', () => {
+  it('smooths reconciliation while attaching the speculative tip to confirmed geometry', () => {
+    const { presentation, game } = scene();
+    const before = presentation.local(20)!.head;
+    const authoritative = predictPath(game.players[0], 0, 1, []).head;
+    authoritative.y += 1;
+    presentation.snapshot({ ...game, tick: 1, players: [authoritative, game.players[1]] }, 20);
+    const after = presentation.local(20)!;
+    expect(after.head.x).toBeCloseTo(before.x, 8);
+    expect(after.head.y).toBeCloseTo(before.y, 8);
+    expect(after.segments[0].x1).toBeCloseTo(authoritative.x, 8);
+    expect(after.segments[0].y1).toBeCloseTo(authoritative.y, 8);
+    expect(after.segments.at(-1)!.x2).toBeCloseTo(after.head.x, 8);
+    expect(after.segments.at(-1)!.y2).toBeCloseTo(after.head.y, 8);
+    expect(presentation.local(200)!.head.y).toBeCloseTo(authoritative.y, 1);
+    presentation.command(1, -1, 21);
+    expect(presentation.local(29)!.head.angle).toBeLessThan(after.head.angle);
+  });
+
+  it('keeps input headroom at a 200ms round trip', () => {
+    const { presentation } = scene();
+    presentation.rtt = 200;
+    presentation.setPhase('countdown', 0);
+    presentation.setPhase('playing', 0);
+    const before = presentation.local(1)!.head.angle;
+    presentation.command(1, -1, 1);
+    expect(presentation.local(8)!.head.angle).toBeLessThan(before);
+  });
+
+  it('does not jump presentation clocks when jittered packets or RTT samples arrive', () => {
+    const { presentation, game } = scene();
+    for (let tick = 1; tick <= 100; tick++) {
+      const now = tick * STEP_MS + (tick % 2 ? 5 : 0);
+      const localBefore = presentation.localTick(now);
+      const remoteBefore = presentation.remoteTick(now);
+      presentation.updateRtt(tick % 2 ? 80 : 120);
+      presentation.snapshot({ ...game, tick }, now);
+      expect(presentation.localTick(now)).toBeCloseTo(localBefore, 8);
+      expect(presentation.remoteTick(now)).toBeCloseTo(remoteBefore, 8);
+      const advance = presentation.localTick(now + 4) - localBefore;
+      expect(advance).toBeGreaterThanOrEqual((4 / STEP_MS) * 0.95 - 1e-10);
+      expect(advance).toBeLessThanOrEqual((4 / STEP_MS) * 1.05 + 1e-10);
+    }
+  });
+
   it('turns before any server acknowledgement arrives', () => {
     const { presentation, game } = scene();
     presentation.command(1, -1, 10);
@@ -98,7 +142,7 @@ describe('prediction and presentation', () => {
     const base = { ...game.players[0], gapLeft: 3 };
     const path = predictPath(base, 0, 3, []);
     expect(path.segments[0].x1).toBeCloseTo(base.x + 3);
-    expect(path.segments[0].tick).toBe(3);
-    expect(presentation.localTick(100000)).toBeLessThanOrEqual(12);
+    expect(path.segments[0].tick).toBe(2);
+    expect(presentation.localTick(100000)).toBeLessThanOrEqual(16);
   });
 });

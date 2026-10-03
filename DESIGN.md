@@ -6,6 +6,8 @@ The user approved a competitive interface and the complete plan on 2026-09-06. T
 
 Friends concentrate on a desktop arena during fast rounds. A quiet dark shell keeps bright trails readable and avoids changing brightness between lobby and gameplay. Use a compact 280px standings/chat rail beside the arena, a short top bar, and concise inline status. On entry, show Create room / Join invite immediately with a representative arena illustration. No promotional landing-page sequence.
 
+Desktop rooms occupy the full window width with 24px side insets and a 48px header. Align the square arena to the right edge, enlarging it to the available width or viewport height minus 132px, whichever is smaller. Keep the round heading and steering controls visible. Omit the decorative page footer inside desktop rooms to give gameplay priority.
+
 ## Visual system
 
 - Tinted charcoal surfaces and near-white text, expressed with OKLCH tokens.

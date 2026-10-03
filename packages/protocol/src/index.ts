@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { Curve, Segment } from '@curvey/sim';
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 export const COLORS = [
   '#c4ec78',
   '#80c7ff',
@@ -27,7 +27,13 @@ export const inputSchema = z.object({
 });
 export type InputCommand = z.infer<typeof inputSchema>;
 export const chatSchema = z.string().trim().min(1).max(300);
-export type Phase = 'lobby' | 'countdown' | 'playing' | 'round-results' | 'match-results';
+export type Phase =
+  | 'lobby'
+  | 'countdown'
+  | 'direction-preview'
+  | 'playing'
+  | 'round-results'
+  | 'match-results';
 export type Member = {
   id: string;
   name: string;

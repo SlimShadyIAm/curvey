@@ -108,7 +108,12 @@ export class GameRoom extends Room {
       this.inputTimes[client.sessionId] = this.clock.elapsedTime;
     });
     this.onMessage('chat', (client, data) => {
-      if (this.phase === 'playing' || this.phase === 'countdown') return;
+      if (
+        this.phase === 'playing' ||
+        this.phase === 'countdown' ||
+        this.phase === 'direction-preview'
+      )
+        return;
       const parsed = chatSchema.safeParse(data),
         member = this.members.get(client.sessionId);
       if (!parsed.success || !member) return;
@@ -271,11 +276,20 @@ export class GameRoom extends Room {
   }
   private tick() {
     if (!this.match) return;
-    if (this.phase === 'countdown' || this.phase === 'round-results') {
+    if (
+      this.phase === 'countdown' ||
+      this.phase === 'direction-preview' ||
+      this.phase === 'round-results'
+    ) {
       this.countdown--;
       if (this.countdown % TICK_RATE === 0) this.publishView();
       if (this.countdown > 0) return;
       if (this.phase === 'countdown') {
+        this.phase = 'direction-preview';
+        this.countdown = 2 * TICK_RATE;
+        this.publishView();
+        return;
+      } else if (this.phase === 'direction-preview') {
         this.phase = 'playing';
         this.publishView();
       } else {

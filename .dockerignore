@@ -1,0 +1,13 @@
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+**/node_modules
+**/dist
+.pnpm-store
+playwright-report
+test-results
+.DS_Store
+*.log
+

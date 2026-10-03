@@ -1,0 +1,25 @@
+{
+  "name": "@curvey/web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "@curvey/sim": "workspace:*",
+    "@curvey/protocol": "workspace:*",
+    "@colyseus/sdk": "0.18.2",
+    "pixi.js": "8.20.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "lucide-react": "^0.468.0"
+  },
+  "devDependencies": {
+    "vite": "^7.1.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0"
+  }
+}

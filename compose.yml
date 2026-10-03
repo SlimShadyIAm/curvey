@@ -1,0 +1,19 @@
+services:
+  curvey:
+    build:
+      context: .
+    image: curvey:local
+    init: true
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 2567
+    ports:
+      - '127.0.0.1:${CURVEY_PORT:-2567}:2567'
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 15s

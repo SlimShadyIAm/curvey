@@ -1,0 +1,22 @@
+{
+  "name": "@curvey/server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsup",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@curvey/sim": "workspace:*",
+    "@curvey/protocol": "workspace:*",
+    "colyseus": "0.18.5",
+    "@colyseus/ws-transport": "^0.18.0",
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.0",
+    "tsup": "^8.5.0",
+    "@types/express": "^5.0.0"
+  }
+}

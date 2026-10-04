@@ -1,6 +1,6 @@
 # Curvey
 
-An invite-only browser curve-survival game. Desktop FFA for 2–8 players first, designed to grow toward 32.
+An invite-only browser curve-survival game. Desktop FFA for 2–24 players first, designed to grow toward 32.
 
 ## Project context
 
@@ -15,11 +15,13 @@ corepack pnpm install
 corepack pnpm dev
 ```
 
-Open **http://localhost:5173**. Create a private room, then open its invite in another browser profile/incognito window. Enter a second name, ready both players, and start from the host browser. There are no bots or single-player mode.
+Open **http://localhost:5173**. Create a private room and choose **Add bot** to play alone, or share its invite with friends. Bots are automatically ready; ready each human player and start from the host browser. Hosts can add or remove bots before a match or rematch, within the 24-player limit.
 
 The web development server uses port 5173; the game server uses 2567. For another computer on your LAN, use the host computer’s LAN address, and permit both ports through its firewall. An invite containing `localhost` only works on the host computer.
 
-**Implemented now:** None-mode FFA, invite rooms, ready checks, authoritative trails/collisions/scoring, round transitions, chat, host transfer/kick, and configurable steering keys. Powerups and the other four presets are upcoming. This is a development slice, not the finished release.
+**Implemented now:** Basic, None, Thin, Corner and Thorner FFA; twelve randomly spawning power-ups with original icons and countdown rings around every affected player; invite rooms, ready checks, authoritative trails/collisions/scoring, round transitions, chat, host transfer/kick, and configurable steering keys. New rooms use Basic. Hosts can change the mode before readying. This is a development build; production hardening and wider browser/load verification remain.
+
+Protocol v8 / ruleset v11 require refreshing all players and starting new rooms after updating the server and client.
 
 ## Checks
 

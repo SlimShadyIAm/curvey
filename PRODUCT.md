@@ -10,7 +10,7 @@ Desktop players joining friends through invite links for competitive curve-survi
 
 ## Confirmed release scope
 
-- Invite-only online FFA rooms, 2–8 players, one player per browser.
+- Invite-only online FFA rooms, 2–24 participants, one human player per browser. Hosts may add/remove automatically ready bots before matches and rematches; solo play supports one human plus up to 23 bots.
 - Five fixed presets: Basic, None, Thin, Corner, Thorner.
 - Core 12 powerups. Hosts choose preset, player capacity, and target score only.
 - Guest names and free colors. No account required.

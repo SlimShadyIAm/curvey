@@ -1,4 +1,4 @@
-import { TICK_RATE } from '@curvey/sim';
+import { TICK_RATE, PRESET_NAMES, type Preset } from '@curvey/sim';
 import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Client, type Room } from '@colyseus/sdk';
 import {
@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import {
   COLORS,
+  MAX_PLAYERS,
   PROTOCOL_VERSION,
   type Baseline,
   type GameView,
@@ -27,6 +28,7 @@ import {
 } from '@curvey/protocol';
 import { ArenaPresentation } from './presentation';
 import type { Steering } from '@curvey/sim';
+import { ActiveEffects, PowerupLegend } from './Powerups';
 import { ArenaPreview } from './ArenaPreview';
 import './diagnostics';
 
@@ -93,7 +95,10 @@ export function App() {
   const [leftKey, setLeftKey] = useState(() => read('curvey.left', 'ArrowLeft'));
   const [rightKey, setRightKey] = useState(() => read('curvey.right', 'ArrowRight'));
   const [binding, setBinding] = useState<'left' | 'right' | null>(null);
-  const [capacity, setCapacity] = useState(8),
+  const [preset, setPreset] = useState<Preset>('Basic');
+  const [settingsPending, setSettingsPending] = useState(false);
+  const pendingSettings = useRef<{ preset: Preset; capacity: number; target: number } | null>(null);
+  const [capacity, setCapacity] = useState(MAX_PLAYERS),
     [target, setTarget] = useState(10);
   const chatEnd = useRef<HTMLDivElement>(null);
   const viewRef = useRef(view);
@@ -109,8 +114,9 @@ export function App() {
     if (view) {
       setCapacity(view.capacity);
       setTarget(view.target);
+      setPreset(view.preset);
     }
-  }, [view?.capacity, view?.target]);
+  }, [view?.capacity, view?.target, view?.preset]);
   useEffect(
     () => () => {
       void roomRef.current?.leave();
@@ -225,6 +231,8 @@ export function App() {
         ? await client.create('curvey', { name: name.trim(), color })
         : await client.joinById(id, { name: name.trim(), color });
       roomRef.current = joined;
+      pendingSettings.current = null;
+      setSettingsPending(false);
       data.current = new ArenaPresentation(joined.sessionId);
       setGame(null);
       setRoom(joined);
@@ -232,6 +240,16 @@ export function App() {
       seq.current = 0;
       history.replaceState(null, '', `?room=${joined.roomId}`);
       joined.onMessage('room', (next: RoomView) => {
+        const requested = pendingSettings.current;
+        if (
+          requested &&
+          requested.preset === next.preset &&
+          requested.capacity === next.capacity &&
+          requested.target === next.target
+        ) {
+          pendingSettings.current = null;
+          setSettingsPending(false);
+        }
         if (next.version !== PROTOCOL_VERSION) {
           setProblem('The game was updated. Refresh to use the latest version.');
           void joined.leave();
@@ -253,7 +271,9 @@ export function App() {
         const now = performance.now();
         data.current.snapshot(next, now);
         // React owns the HUD, not animation. Update immediately for deaths/scores, otherwise 5Hz.
-        const state = next.players.map((p) => `${p.id}:${p.alive}:${p.score}`).join('|');
+        const state = next.players
+          .map((p) => `${p.id}:${p.alive}:${p.score}:${p.effects.map((e) => e.id).join()}`)
+          .join('|');
         if (state !== hudState.current || now - hudStamp.current >= 200) {
           hudState.current = state;
           hudStamp.current = now;
@@ -263,7 +283,11 @@ export function App() {
       joined.onMessage('pong', (stamp: number) =>
         data.current.updateRtt(performance.now() - stamp),
       );
-      joined.onMessage('problem', (text: string) => setProblem(text));
+      joined.onMessage('problem', (text: string) => {
+        setProblem(text);
+        pendingSettings.current = null;
+        setSettingsPending(false);
+      });
       joined.onDrop(() => {
         data.current.setConnected(false);
         setConnected(false);
@@ -486,7 +510,7 @@ export function App() {
             <section className="arena-column">
               <div className="arena-heading">
                 <span>THE ARENA</span>
-                <span className="muted">FFA / 2–8 PLAYERS</span>
+                <span className="muted">FFA / 2–24 PLAYERS</span>
               </div>
               <div className="arena-frame preview-frame">
                 <ArenaPreview />
@@ -523,7 +547,7 @@ export function App() {
               </div>
               <div className="room-title">
                 <h1>{view.members.find((p) => p.id === view.host)?.name ?? 'Private'}’s room</h1>
-                <span className="pill">NONE</span>
+                <span className="pill">{view.preset.toUpperCase()}</span>
               </div>
               <button className="invite-button" onClick={() => void copyInvite()}>
                 {copied ? <Check size={16} /> : <Copy size={16} />}{' '}
@@ -549,6 +573,7 @@ export function App() {
                       <div className="player-info">
                         <span>
                           {p.name}
+                          {p.bot && <small> BOT</small>}
                           {p.id === me?.id && <small> YOU</small>}
                           {p.id === view.host && <Crown size={12} />}
                         </span>
@@ -565,17 +590,20 @@ export function App() {
                                   ? 'In the arena'
                                   : 'Eliminated'}
                         </small>
+                        {curve && active && (
+                          <ActiveEffects effects={curve.effects} tick={game!.tick} compact />
+                        )}
                       </div>
                       {editable ? (
                         p.ready && <Check className="ready-check" size={16} />
                       ) : (
                         <strong className="score">{curve?.score ?? '–'}</strong>
                       )}
-                      {isHost && p.id !== me?.id && (
+                      {isHost && p.id !== me?.id && (!p.bot || editable) && (
                         <button
                           className="mini-button kick"
-                          aria-label={`Kick ${p.name}`}
-                          onClick={() => room.send('kick', p.id)}
+                          aria-label={`${p.bot ? 'Remove' : 'Kick'} ${p.name}`}
+                          onClick={() => room.send(p.bot ? 'remove-bot' : 'kick', p.id)}
                         >
                           <X size={13} />
                         </button>
@@ -584,17 +612,40 @@ export function App() {
                   );
                 })}
               </ol>
+              {editable && isHost && (
+                <button
+                  className="secondary full"
+                  disabled={view.members.length >= view.capacity}
+                  onClick={() => room.send('add-bot')}
+                >
+                  <Plus size={16} />{' '}
+                  {view.members.length >= view.capacity ? 'Room full' : 'Add bot'}
+                </button>
+              )}
               {editable && (
                 <div className="room-settings">
+                  <div className="setting-row">
+                    <label htmlFor="preset">Game mode</label>
+                    <select
+                      id="preset"
+                      disabled={!isHost || settingsPending}
+                      value={preset}
+                      onChange={(e) => setPreset(e.target.value as Preset)}
+                    >
+                      {PRESET_NAMES.map((name) => (
+                        <option key={name}>{name}</option>
+                      ))}
+                    </select>
+                  </div>
                   <div className="setting-row">
                     <label htmlFor="capacity">Player limit</label>
                     <select
                       id="capacity"
-                      disabled={!isHost}
+                      disabled={!isHost || settingsPending}
                       value={capacity}
                       onChange={(e) => setCapacity(Number(e.target.value))}
                     >
-                      {[2, 3, 4, 5, 6, 7, 8].map((n) => (
+                      {Array.from({ length: MAX_PLAYERS - 1 }, (_, i) => i + 2).map((n) => (
                         <option key={n}>{n}</option>
                       ))}
                     </select>
@@ -607,21 +658,31 @@ export function App() {
                       type="number"
                       min={5}
                       max={300}
-                      disabled={!isHost}
+                      disabled={!isHost || settingsPending}
                       value={target}
                       onChange={(e) => setTarget(Number(e.target.value))}
                     />
                   </div>
-                  {isHost && (capacity !== view.capacity || target !== view.target) && (
-                    <button
-                      className="secondary full"
-                      onClick={() => room.send('settings', { capacity, target })}
-                    >
-                      Apply settings
-                    </button>
-                  )}
+                  {isHost &&
+                    (capacity !== view.capacity ||
+                      target !== view.target ||
+                      preset !== view.preset) && (
+                      <button
+                        className="secondary full"
+                        disabled={settingsPending}
+                        onClick={() => {
+                          const settings = { capacity, target, preset };
+                          pendingSettings.current = settings;
+                          setSettingsPending(true);
+                          room.send('settings', settings);
+                        }}
+                      >
+                        {settingsPending ? 'Applying…' : 'Apply settings'}
+                      </button>
+                    )}
                 </div>
               )}
+              {editable && <PowerupLegend preset={view.preset} />}
               {editable && (
                 <div className="ready-actions">
                   <button
@@ -714,7 +775,7 @@ export function App() {
                     : `ROUND ${String(view.round).padStart(2, '0')}`}
                 </span>
                 <span className="arena-meta">
-                  FIRST TO <strong>{view.target}</strong>
+                  {view.preset.toUpperCase()} · FIRST TO <strong>{view.target}</strong>
                   <span className={`status-dot ${!connected ? 'offline' : ''}`} />
                   {connected ? 'CONNECTED' : 'RECONNECTING'}
                 </span>
@@ -746,11 +807,13 @@ export function App() {
                       </>
                     ) : view.phase === 'lobby' ? (
                       <>
-                        <span className="section-label">PRIVATE / NONE MODE</span>
+                        <span className="section-label">
+                          PRIVATE / {view.preset.toUpperCase()} MODE
+                        </span>
                         <h2>Room for a rivalry.</h2>
                         <p>
                           {view.members.length < 2
-                            ? 'Send your invite. You need one more player.'
+                            ? 'Invite a friend or add a bot to get started.'
                             : 'Everyone ready? Let’s settle this.'}
                         </p>
                         <button className="secondary" onClick={() => void copyInvite()}>
@@ -797,6 +860,9 @@ export function App() {
                     'Your steering controls'
                   )}
                 </span>
+                {myCurve?.alive && view.phase === 'playing' && (
+                  <ActiveEffects effects={myCurve.effects} tick={game!.tick} />
+                )}
                 <span>
                   {game ? `${(game.tick / TICK_RATE).toFixed(1)}s` : 'All trails are lethal.'}
                 </span>
@@ -810,7 +876,8 @@ export function App() {
           <ArrowDownLeft size={13} /> MAKE YOUR OWN WAY.
         </span>
         <span>
-          DEVELOPMENT BUILD <span className="footer-divider">/</span> NONE MODE
+          DEVELOPMENT BUILD <span className="footer-divider">/</span>{' '}
+          {view?.preset.toUpperCase() ?? 'FIVE MODES'}
         </span>
       </footer>
       <div className="mobile-note">

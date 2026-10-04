@@ -50,3 +50,43 @@ User requested two successive 10% speed increases and a larger arena occupying t
 ## 2026-10-03: direction preview and reconciliation smoothing
 
 Protocol v5 adds a server-timed two-second stationary direction preview after the three-second countdown, before movement starts. Show each player an arrow aligned to their authoritative spawn angle. Chat and input stay disabled during the preview. Smooth small network corrections with a 60ms decay, blending only the speculative tip from exact confirmed geometry to the corrected head. Keep new steering immediate and authoritative death/large corrections exact.
+
+## 2026-10-04: random power-ups and five presets
+
+Implement the user's power-up plan within the approved twelve-effect scope. New rooms default to Basic; hosts can select None, Thin, Corner or Thorner. Settings reset readiness and freeze at match start. Preserve the current base speed/world size and 60Hz timing. Protocol/ruleset v6 add effect instances, pickup state, per-segment time fractions and sequenced geometry clears; every client must refresh.
+
+Curvey implementation defaults, not verified reference semantics: first drop at two seconds, exponential two-second mean thereafter, six ground pickups, twelve-second ground lifetime, ten-unit collection radius, 24 placement attempts and local head look-ahead clearance. Drop RNG is independent of spawn/gap RNG. Bubbles multiplies the integrated spawn intensity without bypassing the pickup/placement bounds.
+
+Numeric instances multiply then clamp effective values: speed ¼–8×, width ⅛–4×, radius ¼–4×, gap length 1–4× and spawn rate 1–9×. Instances expire independently; booleans use any-active semantics and repeated Reverse does not cancel. This bounds geometry and movement work while keeping stacking meaningful. Gaps keep walls solid; Fly disables drawing/body collision and wraps; Open Walls wraps to the opposite edge, preserving heading and the other coordinate, with trails still lethal. Corner uses nonzero press transitions, not held-key repeat; both keys remain straight.
+
+Time-ordered contacts apply pickup speed/width to the remainder of the tick; heading updates, radius and steering modes take effect at the next fixed heading step. Death wins exact-time pickup ties, including immunity endings and wrap arrivals. Equal-time surviving collectors are selected by seeded draw from sorted IDs, and simultaneous pickups apply by increasing pickup ID. Effects target the living roster at collection; collector death does not undo opponent effects.
+
+Original SVG icons use symbols plus green/red/blue and scope marks. A compact effect strip shows the next independent expiry; the lobby legend explains targets and stacking. The test-only fixture server is a separate loopback entry point and must never be imported by production code. Eight-player synthetic simulation timing does not establish hosted capacity or reference parity.
+
+## 2026-10-04: fewer drops and public countdown halos
+
+User requested substantially less frequent pickups and duration rings around every player, visible to everyone. Ruleset v7 retains protocol v6. First drop moves to four seconds. Subsequent intervals use a three-second minimum plus an exponential five-second mean delay, averaging eight seconds instead of two (75% lower normal rate); reduce the ground cap from six to three. Bubbles retains its existing rate multiplier. Lifetimes, weights and effect durations are unchanged. These supersede the earlier spawn defaults.
+
+Render all living players' authoritative effect durations as a halo around their displayed head. Each distinct effect kind gets a countdown section and matching icon; repeated instances show a count and the next independently expiring instance's fraction. Use one shared, bounded server-snapshot clock instead of the local prediction lead or remote interpolation lag. Freeze on disconnect and non-playing phases; remove on expiry/death/reset. Retain readable text timers and standings badges as supporting information.
+
+## 2026-10-04: lobby bots
+
+User authorized computer opponents. Hosts add/remove bots only before matches/rematches, within the existing eight-participant capacity. Bots are labelled, automatically ready, use unused colors and normal scoring/effects/collisions, and never become host. Bot roster edits reset human readiness. One human can start against bots. No difficulty selector in this change. Server-owned bounded look-ahead produces ordinary steering without changing core simulation rules or gameplay RNG. Protocol v7 adds member.bot; ruleset remains v7.
+
+## 2026-10-04: 15% faster base movement
+
+Increase base speed from 94.38 to 108.537 units/s (×1.15), as requested. Shared simulation, client prediction and bot forecasting use the same constant. Preserve the 35-unit turn radius, so angular turning speed also scales with movement. Effect durations and the 60Hz clock are unchanged. Ruleset v8 retains protocol v7; refresh clients and start new rooms with matching builds.
+
+## 2026-10-04: varied starting positions and headings
+
+User requested more random starts with room to turn. Replace the rotated circle and inward headings with seeded random interior positions and independent uniform full-circle headings each round. Keep heads at least 120 units from walls and 150 units apart (two 70-unit turn diameters plus trail clearance). Bound placement to 256 candidates per player, falling back to a shuffled safe interior grid. This guarantees initial turning space, not immunity from later player choices. Ruleset v9 retains protocol v7 and the existing direction preview.
+
+## 2026-10-04: 24 seats and another 15% speed increase
+
+User explicitly enabled 24 participants and requested another 15% increase. Protocol v8 shares MAX_PLAYERS=24 across room admission, settings validation and lobby controls, and supplies 24 unique assignable colors. Humans and bots share the capacity. Preserve existing arena scaling (1,559 units at 24) and scrollable standings. Broader load qualification remains separate from enabling the requested limit.
+
+Ruleset v10 increases speed from 108.537 to 124.81755 units/s, retaining the turn radius, seeded spawn clearances and power-up durations. Refresh clients and start new rooms with matching server/client builds.
+
+## 2026-10-04: slowdown excludes its collector
+
+User requested that the person collecting slowdown not be slowed. Both turtle effects now target living opponents; the collector keeps their current speed. The former self-targeted ten-second variant retains its tighter-turn modifier, with an opponent-colored icon and explicit enemy label. The five-second opponent variant is unchanged. Ruleset v11 retains protocol v8. Already-active effects from other players remain active.

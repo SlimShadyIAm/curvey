@@ -1,8 +1,10 @@
+import { chooseBotSteering } from './bots';
 import { randomBytes } from 'node:crypto';
 import { Room, type Client } from 'colyseus';
-import { Match, TICK_RATE, type Steering } from '@curvey/sim';
+import { Match, TICK_RATE, type Preset, type Steering } from '@curvey/sim';
 import {
   COLORS,
+  MAX_PLAYERS,
   PROTOCOL_VERSION,
   chatSchema,
   guestSchema,
@@ -18,13 +20,15 @@ import {
 
 /** One authoritative match owner. Room messages are deliberately separate from trail geometry. */
 export class GameRoom extends Room {
-  maxClients = 8;
+  maxClients = MAX_PLAYERS;
   patchRate = null;
   maxMessagesPerSecond = 100;
   private members = new Map<string, Member>();
   private host = '';
+  private botSequence = 0;
   private phase: Phase = 'lobby';
   private target = 10;
+  private preset: Preset = 'Basic';
   private customTarget = false;
   private match?: Match;
   private roster = new Set<string>();
@@ -39,6 +43,8 @@ export class GameRoom extends Room {
   private inputQueue = new Map<string, InputCommand[]>();
   private ack: Record<string, number> = {};
   private sentSegments = 0;
+  private sentGeneration = 0;
+  private geometrySequence = 0;
 
   async onCreate() {
     this.roomId = randomBytes(18).toString('base64url');
@@ -61,14 +67,40 @@ export class GameRoom extends Room {
     this.onMessage('settings', (client, data) => {
       if (client.sessionId !== this.host || !this.editable()) return;
       const parsed = settingsSchema.safeParse(data);
-      if (!parsed.success) return this.error(client, 'Choose 2–8 players and a target from 5–300.');
+      if (!parsed.success)
+        return this.error(client, 'Choose 2–24 players and a target from 5–300.');
       if (parsed.data.capacity < this.members.size)
         return this.error(client, 'The limit cannot be lower than the current room size.');
       this.maxClients = parsed.data.capacity;
       if (parsed.data.target !== this.target) this.customTarget = true;
       this.target = parsed.data.target;
-      this.members.forEach((p) => (p.ready = false));
+      this.preset = parsed.data.preset;
+      this.members.forEach((p) => (p.ready = p.bot));
       this.publishView();
+    });
+    this.onMessage('add-bot', (client) => {
+      if (client.sessionId !== this.host || !this.editable()) return;
+      if (this.members.size >= this.maxClients) return this.error(client, 'The room is full.');
+      const number = ++this.botSequence;
+      const taken = new Set([...this.members.values()].map((p) => p.color));
+      const id = `bot:${number}`;
+      this.members.set(id, {
+        id,
+        name: `Bot ${number}`,
+        color: COLORS.find((c) => !taken.has(c))!,
+        bot: true,
+        ready: true,
+        connected: true,
+        waiting: false,
+      });
+      this.rosterChanged();
+    });
+    this.onMessage('remove-bot', (client, id) => {
+      if (client.sessionId !== this.host || !this.editable() || typeof id !== 'string') return;
+      if (!this.members.get(id)?.bot) return;
+      this.members.delete(id);
+      delete this.steering[id];
+      this.rosterChanged();
     });
     this.onMessage('start', (client) => {
       if (client.sessionId !== this.host || !this.editable()) return;
@@ -80,7 +112,7 @@ export class GameRoom extends Room {
         );
       this.roster = new Set(members.map((p) => p.id));
       members.forEach((p) => (p.waiting = false));
-      this.match = new Match(members, randomBytes(4).readUInt32LE(), this.target);
+      this.match = new Match(members, randomBytes(4).readUInt32LE(), this.target, this.preset);
       this.winner = null;
       this.beginCountdown();
     });
@@ -97,7 +129,11 @@ export class GameRoom extends Room {
       if (round !== this.match.round || seq <= (this.received[client.sessionId] ?? -1)) return;
       this.received[client.sessionId] = seq;
       const queue = this.inputQueue.get(client.sessionId) ?? [];
-      const earliest = Math.max(this.match.tick + 1, queue.at(-1)?.tick ?? 0);
+      const last = queue.at(-1);
+      const earliest = Math.max(
+        this.match.tick + 1,
+        last ? last.tick + (last.steer !== parsed.data.steer ? 1 : 0) : 0,
+      );
       const scheduled = {
         ...parsed.data,
         tick: Math.min(this.match.tick + 12, Math.max(earliest, parsed.data.tick)),
@@ -155,6 +191,7 @@ export class GameRoom extends Room {
       id: client.sessionId,
       name: auth.name,
       color,
+      bot: false,
       ready: false,
       connected: true,
       waiting: !this.editable(),
@@ -175,6 +212,7 @@ export class GameRoom extends Room {
   onReconnect(client: Client) {
     const p = this.members.get(client.sessionId);
     if (p) p.connected = true;
+    this.transferHost();
     this.publishView();
     this.baseline(client);
   }
@@ -208,7 +246,12 @@ export class GameRoom extends Room {
   }
   private transferHost() {
     if (!this.members.get(this.host)?.connected)
-      this.host = [...this.members.values()].find((p) => p.connected)?.id ?? '';
+      this.host = [...this.members.values()].find((p) => p.connected && !p.bot)?.id ?? '';
+  }
+  private rosterChanged() {
+    this.members.forEach((p) => (p.ready = p.bot));
+    if (!this.customTarget) this.target = Math.max(10, 10 * (this.members.size - 1));
+    this.publishView();
   }
   private editable() {
     return this.phase === 'lobby' || this.phase === 'match-results';
@@ -223,6 +266,7 @@ export class GameRoom extends Room {
       host: this.host,
       phase: this.phase,
       capacity: this.maxClients,
+      preset: this.preset,
       target: this.target,
       members: [...this.members.values()],
       chat: this.chat,
@@ -244,6 +288,11 @@ export class GameRoom extends Room {
       width: this.match!.width,
       players: this.match!.players,
       ack: this.ack,
+      pickups: this.match!.pickups,
+      globalEffects: this.match!.globalEffects,
+      collections: this.match!.collections,
+      geometryGeneration: this.match!.geometryGeneration,
+      geometryCount: this.match!.segments.length,
     };
   }
   private eligible(client: Client) {
@@ -251,22 +300,39 @@ export class GameRoom extends Room {
   }
   private baseline(client: Client) {
     if (this.match && this.eligible(client))
-      client.send('baseline', { game: this.gameView(), segments: this.match.segments });
+      client.send('baseline', {
+        game: this.gameView(),
+        segments: this.match.segments,
+        geometrySequence: this.geometrySequence,
+      });
   }
   private publishGame() {
     if (!this.match) return;
-    const segments = this.match.segments.slice(this.sentSegments);
+    const clear = this.sentGeneration !== this.match.geometryGeneration;
+    const from = clear ? 0 : this.sentSegments;
+    const segments = this.match.segments.slice(from);
+    const sequence = ++this.geometrySequence;
     for (const client of this.clients)
       if (this.eligible(client)) {
-        client.send('geometry', { round: this.match.round, from: this.sentSegments, segments });
+        client.send('geometry', {
+          round: this.match.round,
+          from,
+          segments,
+          clear,
+          sequence,
+          generation: this.match.geometryGeneration,
+        });
         client.send('game', this.gameView());
       }
     this.sentSegments = this.match.segments.length;
+    this.sentGeneration = this.match.geometryGeneration;
   }
   private beginCountdown() {
     this.phase = 'countdown';
     this.countdown = 3 * TICK_RATE;
     this.sentSegments = this.match!.segments.length;
+    this.sentGeneration = this.match!.geometryGeneration;
+    this.geometrySequence = 0;
     this.steering = {};
     this.received = {};
     this.inputQueue.clear();
@@ -275,7 +341,7 @@ export class GameRoom extends Room {
     this.publishView();
   }
   private tick() {
-    if (!this.match) return;
+    if (!this.match || ![...this.members.values()].some((p) => !p.bot && p.connected)) return;
     if (
       this.phase === 'countdown' ||
       this.phase === 'direction-preview' ||
@@ -313,7 +379,16 @@ export class GameRoom extends Room {
       }
     }
     for (const id of this.roster)
-      if (this.clock.elapsedTime - (this.inputTimes[id] ?? 0) > 500) this.steering[id] = 0;
+      if (!this.members.get(id)?.bot && this.clock.elapsedTime - (this.inputTimes[id] ?? 0) > 500)
+        this.steering[id] = 0;
+    // Replan at 10Hz; decisions only supply ordinary steering to the simulation.
+    for (const p of this.match.players)
+      if (
+        p.alive &&
+        this.members.get(p.id)?.bot &&
+        (this.match.tick % 6 === 0 || this.steering[p.id] === undefined)
+      )
+        this.steering[p.id] = chooseBotSteering(this.match, p);
     const frame = this.match.step(this.steering);
     this.publishGame();
     if (frame.roundOver) {
@@ -331,7 +406,7 @@ export class GameRoom extends Room {
     this.countdown = 0;
     this.winner = this.match?.winner()?.id ?? null;
     this.members.forEach((p) => {
-      p.ready = false;
+      p.ready = p.bot;
       p.waiting = false;
     });
     this.publishView();

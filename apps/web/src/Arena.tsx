@@ -1,7 +1,25 @@
 import { useEffect, useRef, useState } from 'react';
-import { Application, Container, Graphics, RenderTexture, Sprite } from 'pixi.js';
-import { DT, SPEED, type Curve, type Segment } from '@curvey/sim';
+import {
+  Application,
+  Assets,
+  Container,
+  Graphics,
+  RenderTexture,
+  Sprite,
+  Text,
+  type Texture,
+} from 'pixi.js';
+import {
+  EFFECTS,
+  PICKUP_RADIUS,
+  modifiers,
+  type EffectKind,
+  type Curve,
+  type Segment,
+} from '@curvey/sim';
 import type { ArenaPresentation } from './presentation';
+import { effectRings, EFFECT_SCOPE_COLORS } from './effectRings';
+import { iconUrl } from './Powerups';
 import { recordFrame, type ArenaDiagnostics } from './diagnostics';
 
 export function Arena({
@@ -29,23 +47,37 @@ export function Arena({
         autoDensity: true,
         preference: 'webgl',
       })
-      .then(() => {
+      .then(async () => {
         initialized = true;
         if (disposed) {
           app.destroy(true, { children: true });
           return;
         }
+        const icons = new Map<EffectKind, Texture>();
+        await Promise.all(
+          (Object.keys(EFFECTS) as EffectKind[]).map(async (kind) => {
+            icons.set(kind, await Assets.load<Texture>(iconUrl(kind)));
+          }),
+        );
+        if (disposed) return;
         el.appendChild(app.canvas);
         app.canvas.setAttribute(
           'aria-label',
-          'Live game arena. Your player is marked with a ring.',
+          'Live game arena. Power-up countdown rings and icons are visible around every affected player.',
         );
         const world = new Container(),
           accumulated = new Sprite(),
           incoming = new Graphics(),
           tips = new Graphics(),
-          heads = new Graphics();
-        world.addChild(accumulated, tips, heads);
+          heads = new Graphics(),
+          drops = new Container(),
+          cues = new Graphics(),
+          halos = new Graphics(),
+          statusIcons = new Container();
+        world.addChild(accumulated, tips, drops, cues, halos, statusIcons, heads);
+        const statusSprites = new Map<string, { sprite: Sprite; count: Text }>();
+        const pickupSprites = new Map<number, Sprite>();
+        const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
         app.stage.addChild(world);
         // Old geometry is rasterized once, not submitted as thousands of paths every frame.
         let generation = -1,
@@ -73,9 +105,14 @@ export function Arena({
               .stroke({ width: 1.4, color: p.color, alpha: 0.7 });
             return;
           }
-          heads.circle(p.x, p.y, p.gapLeft > 0 ? 2 : 3.5).fill(p.color);
+          const mod = modifiers(p.effects, data.current.game!.tick);
+          const radius = Math.max(1.5, 2.5 * mod.width);
+          if (mod.fly) heads.circle(p.x, p.y, radius + 3).stroke({ width: 1.5, color: p.color });
+          else heads.circle(p.x, p.y, p.gapLeft > 0 ? 2 : radius + 1).fill(p.color);
           if (p.id === localId)
-            heads.circle(p.x, p.y, 7).stroke({ width: 1, color: p.color, alpha: 0.8 });
+            heads
+              .circle(p.x, p.y, Math.max(7, radius + 4))
+              .stroke({ width: 1, color: p.color, alpha: 0.8 });
         };
         const invalidate = () => {
           generation = -1;
@@ -106,10 +143,52 @@ export function Arena({
             ingested = 0;
             queued = [];
             generation = current.generation;
+            pickupSprites.forEach((sprite) => sprite.destroy());
+            pickupSprites.clear();
+            statusSprites.forEach(({ sprite, count }) => {
+              sprite.destroy();
+              count.destroy();
+            });
+            statusSprites.clear();
             colorCache.clear();
             game.players.forEach((p) => colorCache.set(p.id, p.color));
           }
           while (ingested < current.segments.length) queued.push(current.segments[ingested++]);
+          const pickupIds = new Set(game.pickups.map((p) => p.id));
+          for (const [id, sprite] of pickupSprites)
+            if (!pickupIds.has(id)) {
+              sprite.destroy();
+              pickupSprites.delete(id);
+            }
+          for (const pickup of game.pickups) {
+            let sprite = pickupSprites.get(pickup.id);
+            if (!sprite) {
+              sprite = new Sprite(icons.get(pickup.kind));
+              sprite.anchor.set(0.5);
+              sprite.width = sprite.height = PICKUP_RADIUS * 2;
+              sprite.position.set(pickup.x, pickup.y);
+              drops.addChild(sprite);
+              pickupSprites.set(pickup.id, sprite);
+            }
+            sprite.alpha = pickup.expiresTick - game.tick < 120 ? 0.65 : 1;
+          }
+          cues.clear();
+          if (modifiers(game.globalEffects, game.tick).wrap) {
+            cues
+              .rect(1, 1, game.width - 2, game.width - 2)
+              .stroke({ width: 2, color: '#80c7ff', alpha: 0.7 });
+          }
+          for (const collected of game.collections) {
+            const age = (current.localTick(started) - collected.tick) / 60;
+            if (age < 0 || age > 0.35) continue;
+            cues
+              .circle(
+                collected.x,
+                collected.y,
+                PICKUP_RADIUS + (reducedMotion.matches ? 0 : age * 18),
+              )
+              .stroke({ width: 1.5, color: '#d7e4de', alpha: (1 - age / 0.35) * 0.8 });
+          }
           const remoteTick = current.remoteTick(started);
           incoming.clear();
           tips.clear();
@@ -129,11 +208,11 @@ export function Arena({
               waiting.push(segment);
               // Animate the confirmed remote tip within its tick, including partial gap boundaries.
               if (segment.tick === Math.ceil(remoteTick)) {
-                const length = Math.hypot(segment.x2 - segment.x1, segment.y2 - segment.y1);
-                const bodyStart = Math.max(0, 1 - length / (SPEED * DT));
+                const bodyStart = segment.startTime ?? 0;
+                const bodyEnd = segment.endTime ?? 1;
                 const fraction = Math.max(
                   0,
-                  (remoteTick - Math.floor(remoteTick) - bodyStart) / (1 - bodyStart || 1),
+                  (remoteTick - Math.floor(remoteTick) - bodyStart) / (bodyEnd - bodyStart || 1),
                 );
                 if (fraction > 0) drawSegment(tips, segment, Math.min(1, fraction));
               }
@@ -141,6 +220,10 @@ export function Arena({
           }
           queued = waiting;
           if (painted) app.renderer.render({ container: incoming, target: texture!, clear: false });
+          halos.clear();
+          const statusKeys = new Set<string>();
+          const renderedRings: ArenaDiagnostics['rings'] = {};
+          const effectTick = current.effectTick(started);
           let local: ArenaDiagnostics['local'] = null;
           for (const player of game.players) {
             const path =
@@ -150,6 +233,65 @@ export function Arena({
             if (!path) continue;
             for (const segment of path.segments) drawSegment(tips, segment);
             drawHead(path.head);
+            // All clients render all players' authoritative effects, including opponents.
+            const rings = player.alive ? effectRings(player.effects, effectTick) : [];
+            renderedRings[player.id] = rings;
+            if (rings.length) {
+              const { x, y } = path.head;
+              const radius = Math.max(
+                14,
+                2.5 * modifiers(player.effects, effectTick).width + 7,
+                rings.length * 3.4,
+              );
+              const sector = (Math.PI * 2) / rings.length;
+              const gap = rings.length > 1 ? 0.14 : 0.055;
+              rings.forEach((ring, index) => {
+                const start = -Math.PI / 2 + index * sector + gap / 2;
+                const sweep = sector - gap;
+                const color = EFFECT_SCOPE_COLORS[EFFECTS[ring.kind].target];
+                // Narrow dark backing keeps the timer legible over bright trails.
+                halos
+                  .moveTo(x + Math.cos(start) * radius, y + Math.sin(start) * radius)
+                  .arc(x, y, radius, start, start + sweep)
+                  .stroke({ width: 4.5, color: '#101415', alpha: 0.85 });
+                halos
+                  .moveTo(x + Math.cos(start) * radius, y + Math.sin(start) * radius)
+                  .arc(x, y, radius, start, start + sweep)
+                  .stroke({ width: 2, color, alpha: 0.2 });
+                halos
+                  .moveTo(x + Math.cos(start) * radius, y + Math.sin(start) * radius)
+                  .arc(x, y, radius, start, start + sweep * ring.fraction)
+                  .stroke({ width: 2, color, cap: 'round' });
+                const key = `${player.id}:${ring.kind}`;
+                statusKeys.add(key);
+                let entry = statusSprites.get(key);
+                if (!entry) {
+                  const sprite = new Sprite(icons.get(ring.kind));
+                  sprite.anchor.set(0.5);
+                  sprite.width = sprite.height = 12;
+                  const count = new Text({
+                    text: '',
+                    style: {
+                      fontFamily: 'system-ui',
+                      fontSize: 8,
+                      fontWeight: '700',
+                      fill: '#e1eae5',
+                      stroke: { color: '#101415', width: 2 },
+                    },
+                  });
+                  statusIcons.addChild(sprite, count);
+                  entry = { sprite, count };
+                  statusSprites.set(key, entry);
+                }
+                const middle = start + sweep / 2;
+                entry.sprite.position.set(
+                  x + Math.cos(middle) * (radius + 9),
+                  y + Math.sin(middle) * (radius + 9),
+                );
+                entry.count.text = ring.stacks > 1 ? String(ring.stacks) : '';
+                entry.count.position.set(entry.sprite.x + 4, entry.sprite.y + 2);
+              });
+            }
             if (player.id === localId && player.alive && current.phase === 'direction-preview') {
               const { x, y, angle, color } = path.head;
               const dx = Math.cos(angle),
@@ -172,7 +314,13 @@ export function Arena({
                 alive: path.head.alive,
               };
           }
-          recordFrame(started, local, game.tick);
+          for (const [key, entry] of statusSprites)
+            if (!statusKeys.has(key)) {
+              entry.sprite.destroy();
+              entry.count.destroy();
+              statusSprites.delete(key);
+            }
+          recordFrame(started, local, game, renderedRings);
         });
       })
       .catch(() => {

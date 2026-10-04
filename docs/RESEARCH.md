@@ -17,6 +17,8 @@ Investigated 2026-09-06 using official pages and public HTML/CSS/JavaScript. No 
 
 ## Evidence boundaries
 
+Rechecked the official about-page catalogue on 2026-10-04 for the [power-up plan](POWERUPS.md). Its values inform the proposed registry; spawn cadence, placement, stacking bounds and exact collision/input semantics remain unverified. SVG icon links were discoverable, but direct visual inspection was unavailable during this planning session. No live reference match was tested.
+
 The proposed Node/Colyseus server is our architecture, not a discovered Curve Crash backend. Original lag compensation, deployment and exact fairness rules are unknown. Our scoring ties, disconnect policy and timeouts are explicit product decisions.
 
 ## Remaining fidelity checks

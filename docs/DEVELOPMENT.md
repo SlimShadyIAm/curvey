@@ -22,7 +22,7 @@ Screenshots/traces are generated under ignored `test-results/`. They are tempora
 
 `Match` in packages/sim is the pure engine. `GameRoom` schedules it and owns room state. The protocol package exports contracts and input validators. App binds room events to UI state; Arena retains confirmed trail data and renders through Pixi.
 
-Current transport deliberately uses explicit messages rather than synchronized per-head Schema fields. `room` is low-frequency lobby/HUD state, `baseline` is full current geometry for roster members, `geometry` contains ordered append increments, and `game` contains authoritative heads and input acknowledgments. Protocol v5 includes the stationary `direction-preview` phase after countdown. Input carries round, sequence and requested simulation tick IDs; acknowledgments identify applied commands. Refresh all players when updating this protocol. Late-arrival members receive room state only.
+Current transport deliberately uses explicit messages rather than synchronized per-head Schema fields. `room` is low-frequency lobby/HUD state, `baseline` is full current geometry for roster members, `geometry` contains ordered append increments, and `game` contains authoritative heads and input acknowledgments. Protocol v6 includes power-ups, preset selection, sequenced geometry clears and the existing stationary `direction-preview` phase after countdown. Input carries round, sequence and requested simulation tick IDs; acknowledgments identify applied commands. Refresh all players when updating this protocol. Late-arrival members receive room state only.
 
 ## Useful debugging boundaries
 
@@ -34,13 +34,13 @@ Current transport deliberately uses explicit messages rather than synchronized p
 
 ## Current constraints
 
-Only None mode is wired. No production recording or database. Runtime restart loses rooms. Browser reconnection uses Colyseus's automatic reconnect while the server holds the seat for 15 seconds; full page refresh currently creates a new guest session instead of restoring the seat. Do not represent this as complete reconnect coverage.
+All five fixed presets and twelve power-ups are wired. No production recording or database. Runtime restart loses rooms. Browser reconnection uses Colyseus's automatic reconnect while the server holds the seat for 15 seconds; full page refresh currently creates a new guest session instead of restoring the seat. Do not represent this as complete reconnect coverage.
 
-Host settings start at eight seats. Target score adjusts to 10 × (room members − 1), with a minimum default of ten, until the host explicitly changes it. Match rosters freeze at start; later arrivals wait. Rematches reset scores and require readiness again.
+Host settings start at 24 seats. Target score adjusts to 10 × (room members − 1), with a minimum default of ten, until the host explicitly changes it. Match rosters freeze at start; later arrivals wait. Rematches reset scores and require readiness again.
 
-This initial engine uses ordinary segment arrays plus a spatial grid, not the final typed-array storage. It has swept capsule/static-trail tests and symmetric moving-head contacts at the base movement rate. It is not yet validated for every same-tick newly-deposited/dead-trail interaction or powerup speeds. Baseline wall behavior during gaps is explicitly provisional.
+This initial engine uses ordinary segment arrays plus a spatial grid, not the final typed-array storage. It has swept capsule/static-trail tests and symmetric moving-head contacts at the base movement rate. Swept growing-trail and dead-trail scenarios, high-speed pickup contact, immunity expiry and wrapping now have regression coverage. Gaps keep walls solid as an explicit Curvey rule. Dense long-round load remains unmeasured.
 
-Base-movement local prediction and adaptive remote buffering are implemented. Extreme-jitter reconciliation, effect-aware prediction, outbound backpressure, load/capacity tests, and non-Chromium verification remain release gates. Do not deploy this development slice as a hardened public service.
+Effect-aware local prediction and adaptive remote buffering are implemented. Extreme-jitter reconciliation, outbound backpressure, real eight-client/concurrent-room capacity tests, and non-Chromium verification remain release gates. Do not deploy this development slice as a hardened public service.
 
 ## Responsiveness diagnostics
 
@@ -51,3 +51,9 @@ Open the development entry page with `?debug=1` before creating or joining a roo
 `ArenaPresentation` replays unacknowledged steering with the shared fixed-step movement helper, including a fractional frame step. Prediction is capped at 16 ticks (267ms), with two ticks reserved above the target lead for arrival jitter; remote extrapolation is capped at two ticks. Clock corrections adjust playback rate within ±5% instead of jumping on packet arrivals. Known gaps are presented, while collisions, scoring and random events remain server-authoritative. The server clamps requested input ticks to its next 12 ticks and acknowledges them on application. Confirmed geometry retains creation ticks so remote trail tips can follow the same presentation clock.
 
 `tests/timing.spec.ts` uses two real SDK clients and monotonic elapsed time to check the three-second countdown, two-second stationary direction preview, five-second results interval, and approximately 60 authoritative ticks per second. It bypasses canvas startup to avoid measuring renderer stalls as network cadence. The installed Colyseus version requires disabling patches again after fixed-step initialization to remove its previously created clock-only timer. Do not remove that ordering without running this regression.
+
+## Power-up verification
+
+`corepack pnpm test:e2e tests/powerups.spec.ts` starts a separate loopback-only fixture server on port 2569 from `apps/server/test/powerup-server.ts`. It configures known engine scenes through a test-only HTTP route and routes its two browsers there, leaving production GameRoom input authority unchanged. The production entry point never imports this harness. The tests verify all twelve collectors/targets, geometry clear generations, reconnect state, preset controls, screenshots and Corner input under latency/jitter. Keep test tokens and screenshots untracked.
+
+Unit tests cover seeded placement and weights, expiry/stacking, swept contacts, effect combinations, prediction and geometry sequencing. The endurance tests run eight-player repeated rounds and a synthetic full ten-minute flight round; they are not proof of dense-arena or network capacity. The opt-in development diagnostics now expose current pickup/effect summaries, rendered countdown-ring fractions and geometry revision/count alongside frame timing; they store no production history.

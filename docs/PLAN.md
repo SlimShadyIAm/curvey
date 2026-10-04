@@ -4,9 +4,11 @@ Approved 2026-09-06. PRODUCT is authoritative for scope; ARCHITECTURE for techni
 
 ## Milestones
 
+Milestone 3 implementation and remaining acceptance checks: [Power-up implementation plan](POWERUPS.md), including catalogue, proposed spawn tuning, delivery order and acceptance checks.
+
 1. **Rules and engine foundation:** seeded fixed-step movement, trails, spatial collision index, holes, scoring, round resets, meaningful geometry tests. Verify reference-sensitive flight/wall/gap/corner behavior before claiming parity.
 2. **Multiplayer vertical slice:** invite-only rooms, two independent browsers, readiness, None mode, server scoring, results, rematch, disconnect elimination, host transfer.
-3. **Launch gameplay:** 12 effects, five fixed presets, 2–8 players, late-arrival waiting, text chat, mute, kick.
+3. **Launch gameplay:** 12 effects, five fixed presets, 2–24 players, late-arrival waiting, text chat, mute, kick.
 4. **Competitive UI and resilience:** complete states, remapping, accessibility, responsive shell, graphics recovery, network failures. Test Chrome, Firefox, Safari and Edge before release claims.
 5. **Hosted release:** CDN web assets and persistent European Node game process over HTTPS/WSS, Docker, health/readiness, graceful draining. Hosting provider and credentials are not configured yet.
 
@@ -35,4 +37,8 @@ Approved 2026-09-06. PRODUCT is authoritative for scope; ARCHITECTURE for techni
 
 ## Expansion
 
-Keep player/connection/curve identities separate and collections uncapped internally by eight. Increase actual enabled capacity 8 → 16 → 32 only after geometry, network, dense-arena and standings checks. Scale by assigning whole rooms to processes. Later features need separate specifications; do not silently expand v1.
+Keep player/connection/curve identities separate and collections uncapped internally by eight. The user enabled 24 participants; increase actual enabled capacity 24 → 32 only after geometry, network, dense-arena and standings checks. Scale by assigning whole rooms to processes. Later features need separate specifications; do not silently expand v1.
+
+## Bot follow-up (2026-10-04)
+
+Implemented host-managed lobby/rematch bots and server-owned obstacle-avoidance steering. Next: playtest difficulty and crowded mixed human/bot rooms; tune strategy only from observed gameplay.

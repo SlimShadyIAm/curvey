@@ -1,80 +1,95 @@
 # Project status
 
-Updated: 2026-10-03.
+Updated: 2026-10-04.
 
-## Current state: first playable None-mode slice
+## Current state: lobby bots, five presets and random power-ups
 
-The repository began empty. Durable product/research/architecture docs and a working TypeScript workspace now exist. The full launch plan is not complete.
+Implemented locally:
 
-Implemented:
+- Hosts can add/remove labelled, automatically ready bots before matches and rematches. One human can play against up to 23 bots within the 24-participant capacity. Server AI supplies steering; bots use normal collisions, pickups, scoring and public effect timers.
 
-- Pure 60Hz engine: seeded spawning/gaps, continuous steering, spatial trail index, swept capsule collisions, simultaneous head contacts, survival scoring, reset/winner logic.
-- Colyseus server: cryptographically random private room IDs, guest admission, unique room colors, ready/start, capacity/target controls, frozen match roster, countdown/results/rematch transitions.
-- Explicit authoritative game snapshots and ordered trail increments at 60Hz. Late arrivals receive no live arena state.
-- Lobby/between-round chat, local mute, host kick and host transfer. Detected departures eliminate players; dropped sessions reserve their seat for 15 seconds through Colyseus reconnection.
-- React competitive shell, lazy-loaded Pixi arena, raster-cached confirmed trails, frame-rate trail tips, local prediction/reconciliation and buffered remote heads. Original SVG entry illustration is labeled as an illustration, not a live match.
-- Name/color preferences and key remapping, keyboard controls/blur release, reduced-motion styling, responsive entry/lobby, actionable error states.
-- Compiled server serves compiled web assets and supports same-origin connections.
-- Production multi-stage Docker image and Compose service: frozen-lockfile build, production dependency deploy, non-root/read-only runtime, loopback-only published port, and HTTP health check.
-- Git repository initialized on `main` and tracking its configured GitHub remote.
+- Invite-only desktop FFA for 2–24 players; None, Basic, Thin, Corner and Thorner. New rooms default to Basic. Hosts choose preset, capacity and score target before a match; changes reset readiness and settings freeze at start.
+- Twelve effects with original SVG icons, weighted seeded random drops, swept collection, independently expiring stacks, countdown halos around every affected player, a keyboard-accessible lobby legend, text timers and opponent effect badges. Server owns randomness, pickup races, collisions and scoring.
+- Pure 60Hz simulation with time-ordered intra-tick events: effects change speed/width immediately; gap endings, flight landings, wraps and deaths resolve before equal-time pickups. Newly deposited and dead-player trails participate in collisions.
+- Geometry generations and sequenced append/clear messages support Eraser, baseline replacement and reconnect. Every snapshot identifies its required geometry. Wrapping splits geometry instead of drawing a connector across the map.
+- Shared effect-aware movement, local prediction/reconciliation, buffered remote heads, corner input-edge preservation, and cached confirmed Pixi trails. Predict only confirmed effects and known expiry; never predict pickup ownership or collision outcomes.
+- Guest names/colors, remappable controls, readiness, three-second countdown, two-second stationary heading preview, survival scoring, results/rematches, host transfer/kick, lobby/results chat and local mute. Late arrivals wait without receiving arena state. Disconnects eliminate immediately when detected; reconnect reserves the seat for 15 seconds without resurrection.
+- Compiled server serves web assets. Docker/Compose configuration exists; full Docker image assembly still needs a working daemon/host verification.
 
-## Verification
+Protocol is **v8** and ruleset is **v11**. Refresh every browser and start new rooms after updating both server and client. No deployment was performed.
 
-- `corepack pnpm typecheck`: passed.
-- Latest unit run: 18 of 19 passed; the gap-boundary assertion still expected the old speed's third tick. Updated it to tick two for 94.38 units/s, without rerunning at the user's request.
-- `corepack pnpm build`: passed for web and compiled server. Pixi is loaded only when needed; initial bundle is approximately 470kB minified / 145kB gzip. Upstream Zod PURE-annotation warnings remain non-blocking.
-- Docker configuration was added and its Compose model was validated. Formatting, typecheck, all 16 unit tests, and the production build passed. A full image build was attempted but could not run because the local Docker daemon was unavailable; image assembly and its health check remain to be verified on a Docker host.
-- Docker dependency assembly no longer uses pnpm's legacy `deploy`, which re-resolved Colyseus's unused optional uWebSockets transport and failed in the slim image because Git was absent. A frozen-lockfile, production-only dependency stage now supplies the runtime tree without that second resolution; VPS image rebuild verification is pending.
-- Arena/pace refinement verification: formatting, typecheck, all 16 unit tests, production build, and all three two-browser game/responsive scenarios passed. The 1440×1000 live-match screenshot was inspected: the 60px larger square remains fully visible with its heading and controls, and does not overlap the room rail or footer.
-- Clock-fix verification: all 6 integration tests passed including compiled-server smoke. Gameplay-tuning verification: unit tests, typecheck and build passed; 5 integration checks passed; the optional compiled-server smoke was skipped on this rerun. Arena screenshot inspected. Timing remained 60.22 ticks/s with 2.99s / 5.01s countdowns.
-- Browser scenarios: two independent contexts create/join, exchange chat, ready/start, render actual canvases, steer, process departure scoring, transfer host; late arrival has no canvas; host kick displays the correct reason; invalid invite feedback; production build creates a room.
-- Screenshots inspected at 1440×1000, 1024×768 and 390×844: entry, live match and responsive layout. Corrected desktop arena height to keep the field visible. No horizontal overflow on narrow entry screen. Desktop full-page content may scroll, but the live field fits its viewport.
-- Corrected a Colyseus input-property naming collision, Corepack command portability, shared-package production bundling, and use of a framework-reserved close code for kicks.
+## Power-up rules selected for Curvey
 
-## Current gameplay tuning
+See [POWERUPS](POWERUPS.md) for the catalogue/plan and [DECISIONS](DECISIONS.md) for durable semantics. These choices are not measured Curve Crash parity:
 
-The larger world remains: minimum map width 600 and eight-player width 900. Two successive requested 10% increases take speed from 78 to 94.38 units/s, for a two-player empty-field crossing time of about 6.4 seconds. Turn radius and trail thickness remain unchanged. Desktop rooms now use the full window width with 24px side insets, a 48px header, a 280px room rail, and a square arena capped at viewport height minus 132px. Entry and mobile layouts retain their existing structure. This tuning is not a measured reference-speed match. Refresh all players and start a new room for protocol v5 / ruleset v5.
+- First drop after four seconds; subsequent intervals are three seconds plus an exponential delay averaging five seconds (eight seconds total, 75% lower base rate). Bubbles accelerates this schedule as before. At most three ground pickups, twelve-second ground lifetime and ten-unit collection radius. Placement makes at most 24 attempts with local trail/head/wall clearance; it does not prove maze reachability.
+- Numeric modifiers multiply, then effective values are bounded: speed ¼–8×, width ⅛–4×, radius ¼–4×, gap length up to 4×, Bubbles rate up to 9×. Every instance expires independently. Reverse never cancels itself.
+- Gaps keep walls solid. Fly suppresses trails/body collisions and wraps at edges. Open Walls wraps without trail immunity. Corner turns once per nonzero input transition; holding does not repeat and both keys mean straight.
+- Death wins equal-time pickup ties, including immunity expiry. Equal-time surviving collectors use a seeded draw over sorted identities. Simultaneous pickups apply by pickup ID. Heading is chosen once per fixed tick; newly collected speed/width apply to the remaining fraction, and steering/radius changes affect the next heading step.
 
-## Latest responsiveness correction
+## Latest change: slowdown affects opponents only
 
-Snapshot arrivals previously moved the presentation clock by up to half a tick, turning packet jitter into visible movement jitter. Local and remote clocks now correct their rates within ±5% without those per-packet steps. Remote timing is independent of RTT sample changes. Client prediction now allows 16 ticks (267ms), targeting RTT plus one tick and reserving two ticks above the target, so 200ms RTT does not immediately pin new steering at the prediction limit. Server input scheduling and all collision/scoring authority remain unchanged.
+Both slowdown pickups now exclude their collector. The former self-targeted ten-second variant applies its half-speed/tighter-turn modifiers to opponents, with a matching opponent icon and description. The five-second variant already targeted opponents. Existing effects from other players are not removed by collecting a pickup.
 
-Small reconciliation corrections now decay with a 60ms time constant, blending only speculative trail tips between confirmed geometry and the corrected head. New keyboard intent remains immediate; deaths and large corrections remain authoritative.
+Verification: **78 unit tests passed**, including explicit normal-speed collector checks for both variants. Type checking and production web/server builds passed. Protocol v8 / ruleset v11. Final targeted reruns passed all twelve pickups across two browsers (including slowdown recipients, Eraser, rings and reconnect), Corner with latency, and eight-client collection/scoring. The combined regression pass plus targeted fixes covers 13 passing browser/network scenarios; production smoke was skipped. Fixed narrow-screen color wrapping and made pickup checks assert lasting effects instead of expiring one-second cues.
 
-The three-second countdown now leads into a server-timed two-second stationary direction preview. Each player sees an arrow aligned to their own spawn heading before movement starts. Chat and steering remain disabled until play.
+## Previous change: 24 participants and another 15% speed increase
 
-Verification: latest typecheck passed. All five enabled integration tests passed; optional production smoke was skipped. The delayed-network browser run measured 0.6ms to a changed presentation heading, 19.1ms median frame interval and 24.1ms p95; this is browser instrumentation, not physical display latency or a frame-rate guarantee. Authoritative timing measured 59.45Hz with a 2.99s countdown, 1.99s preview and 5.00s results interval. Inspected direction-preview and desktop/laptop arena screenshots; viewport checks passed at 2000×1250 and 1024×768. Nineteen unit tests passed before the final speed increase; the final run passed 18 with one outdated gap-tick expectation, now corrected without rerun. Production build passed before the last reconciliation/speed edits; its final rerun was prevented by that test failure. The user explicitly requested no further tests before pushing. Next verification: rerun units/build when requested, then measure extreme-jitter reconciliation and eight-player load. Long stalls still reach the prediction cap; large corrections can still move a head. Non-Chromium behavior remains unverified.
+Raised default/maximum capacity to 24 for both humans and bots, shared across server validation and lobby controls. Added 24 unique assignable colors; existing roster scrolling and arena scaling support the larger roster. Base speed is now 124.81755 units/s (another 15%); shared prediction and AI use the same value. Protocol v8 / ruleset v10.
 
-## Clock correction and 60Hz
+Verification: 76 unit tests, type checking and production builds passed. Two 24-seat integration/browser tests passed: 24 human SDK clients joined/started with unique colors and matching rosters, seat 25 was rejected, and a full bot lobby retained usable add/remove controls. Inspected the full-lobby Chromium screenshot. Dense 24-player long-round CPU, concurrent rooms and palette distinguishability need further playtesting; enabling 24 seats does not establish hosted capacity.
 
-A second user report exposed a server clock defect missed by the earlier input-response test. Colyseus started a clock-only timer when patches were disabled before simulation initialization; that timer stole elapsed time from the fixed-step accumulator. Disabling patches again after starting simulation removes the conflicting timer. Both authoritative simulation and game/geometry publication now run at 60Hz, using shared TICK_RATE for three-second start and five-second results countdowns. Ruleset v3 / protocol v4 require all players to refresh.
+## Previous change: random starts with turning room
 
-A direct two-SDK-client timing regression measured 60.35–60.70 authoritative ticks/s, 2.98–3.00s start countdown and 4.99–5.02s results interval. It measures independently of renderer startup and checks seconds against a monotonic clock. Eight-player/long-round bandwidth and CPU costs at the increased rate remain unmeasured.
+Each round now samples seeded random positions throughout the interior and independent full-circle headings, replacing the evenly spaced circle with inward headings. Wall clearance is at least 120 units; head separation is at least 150 units. Placement work is bounded, with a safely spaced shuffled-grid fallback. Existing authoritative direction preview shows the new headings.
 
-## Earlier responsiveness fix
+Verification: **76 unit tests passed**, including clearance across 200 seeds at each supported room size (and the internal 32-player size), deterministic seeds/new rounds, heading/position variety, forced fallback, and simultaneous immediate left/right U-turn survival across 20 eight-player seeds. Type checking and production web/server builds passed. No rendering code changed; browser inspection was not rerun. Next: playtest opening encounters and bot choices at the new random starts. Initial clearance does not guarantee safety after players move toward each other.
 
-Local steering now predicts immediately using shared movement math, then reconciles applied server acknowledgments. Protocol v4 includes bounded target ticks; refresh both players after this update. Remote presentation uses RTT-aware interpolation with a jitter allowance. Heads and active trail tips update on every display frame; completed geometry is raster-cached, and React HUD updates are limited to 5Hz or meaningful state changes.
+## Previous change: 15% faster base movement
 
-With an artificial 100ms delay in each network direction, the Chromium diagnostic measured input-to-presented-heading delay dropping from 223.2ms to 0.6–5.1ms across successful post-fix runs (next-frame timing). Median frame interval was 16.7ms, p95 about 17.4ms. This measures browser presentation state, not physical display latency, and is not a cross-hardware guarantee. The new regression test requires a response within 80ms under that 200ms round trip.
+Base speed is now 108.537 units/s, up from 94.38. Authority, client prediction and bot forecasts share this value. The 35-unit turn radius makes angular turning speed scale accordingly. Ruleset is v8; protocol remains v7.
 
-## Run / handoff
+Verification: all **72 unit tests**, type checking and production web/server builds passed. Existing tests cover prediction, power-ups, collisions, bot avoidance and synthetic endurance. No UI code changed; browser checks were not rerun for this tuning. Next: playtest the faster pace with humans and bots; existing load and browser release gates remain.
 
-`corepack pnpm dev`, then open http://localhost:5173. The development servers were left running at the end of this session; if they are gone, rerun the command. Temporary production smoke-test server on 2568 was stopped. Use two independent browser contexts and share the room invite. See README and DEVELOPMENT for all commands.
+## Previous change: playable lobby bots
 
-## Next concrete work, in order
+Added host-only add/remove controls, capacity/color allocation, automatic bot readiness, and explicit protocol v7 bot identity. Bots never inherit host ownership. Server-side AI evaluates three steering choices at 10Hz, with a bounded forecast for walls, trails, nearby opponents, wrapping, known gaps and effect expiry; safe routes can favor pickups. Match simulation pauses when no human remains connected.
 
-1. Finish fidelity/correctness checks before adding effects: gap-wall behavior, corner semantics, collision tolerance, and same-tick newly deposited/dead-trail contacts. Extend geometry tests for those cases.
-2. Implement a shared effect registry and the 12 approved effects; add Basic, Thin, Corner and Thorner selectors only when each works. Preserve fixed preset mechanics.
-3. Extend the implemented base-movement prediction to effect-modified movement as effects land. Validate extreme jitter and reconciliation behavior.
-4. Harden sync and lifecycle: bound outbound queues/baseline requests, test abrupt-network reconnection and rematches, restore sessions across refresh if desired. Review automatic target recalculation when queued members enter the next match.
-5. Test eight-player/long-round/concurrent-room load and Firefox/Safari/Edge. Measure actual capacity before hosting or raising the player cap. Validate the production image on a Debian host and add graceful draining before treating hosted deployment as hardened.
+Verification: **72 unit tests passed**, including wall/trail avoidance, Reverse compensation, no authoritative-state mutation and better aggregate survival than straight-only steering across five seeded eight-player rounds. **Six browser/network checks passed**: three bot scenarios (solo lobby/gameplay, permissions/capacity/autonomous movement, human host transfer) and three existing multiplayer/UI regressions. Type checking and production web/server builds passed. Inspected lobby and live-match Chromium screenshots at 1440×1000.
 
-## Known limits and scope reminders
+Limitations: one heuristic difficulty; bots can make poor choices in tight spaces and do not know future random gaps or opponent inputs. Dense long-round bot CPU, cross-browser coverage and a complete bot rematch lifecycle remain follow-up verification. Next concrete work: playtest crowded mixed human/bot matches and tune decision quality from observed failures.
 
-- Only None mode exists. No powerups, accounts, public discovery, teams, shared keyboard, dedicated spectator slots or recordings.
-- Two-player behavior is browser-tested; the 2–8 admission limit is implemented but eight-player performance is unmeasured. 32-player capacity remains an architectural target.
-- Segment storage uses ordinary arrays rather than final typed-array chunks. Initial same-tick collision handling is not yet certified for high-speed effects.
-- Gap immunity keeps walls solid provisionally. Do not claim exact Curve Crash parity.
-- Auto reconnect code exists, but abrupt-network recovery has not been browser-tested; full refresh does not restore the guest seat.
-- Full match-to-target/rematch endurance, context-loss recovery, screen-reader behavior and cross-browser coverage remain unverified.
-- No database, hosted service, deployment credentials, production rate/backpressure hardening, or operational performance claims.
+## Previous change: quieter drops and shared countdown halos
+
+Implemented the user's spawn-rate reduction and public on-player timers. Every affected living player has a countdown halo visible in every client. Distinct effect kinds get separate sections with matching icons; stacked instances show a count and the next expiry. Sections drain smoothly against a shared authoritative clock, freeze during disconnect/results, and disappear when effects expire or the player dies. The existing text timers remain for precise duration labels. No protocol change was needed.
+
+Verification for this change: **69 unit tests passed**, including normal spawn spacing/rate, independent ring expiry and clock freeze. All **3 power-up multiplayer tests passed**, covering both browsers' views, stacked/simultaneous ring expiry, reconnect, 200ms RTT with jitter and eight SDK clients. Type checking, production web/server build, formatting and diff checks passed. Inspected countdown-ring screenshots at 1440×1000 and 1024×768. Latest eight-player synthetic endurance under the quieter schedule: 85 rounds, peak 3,590 segments, two collections, 0.028ms p95 / 0.99ms maximum step on Apple M4. These remain synthetic checks, not hosted capacity measurements.
+
+## Earlier full power-up implementation verification
+
+- Initial full implementation unit run: **66 tests passed**, including all twelve targets/durations, stacking, high-speed collection, width history, pickup/death ties, gap/flight expiry, flight landing, Eraser, wrapping, corners, seeded drops, blocked placement and effect-aware prediction. Geometry sequencing and baseline tests passed.
+- `corepack pnpm typecheck`, `corepack pnpm format:check` and `git diff --check`: passed.
+- `corepack pnpm build`: passed for production web and server. Compiled-app room-creation smoke passed. Non-blocking upstream Zod PURE-annotation warnings remain.
+- Deterministic two-browser Chromium scenario passed for all twelve pickups, matching collection/target state, Eraser generations and real disconnect/reconnect baseline recovery. The fixture is a separate loopback-only test entry point, absent from production imports.
+- Initial full implementation browser/network run: **9 passed**, including room/chat/host transfer, late-arrival/kick, responsive entry, all twelve pickups/reconnect, preset controls, eight SDK clients, compiled-app smoke, delayed steering and authoritative timing. Eight clients agreed on one Fat collection, seven affected opponents and departure scoring.
+- Under 200ms round trip with ±15ms receive jitter, Corner changed the presented heading in **0.9ms** and did not repeat while held. Existing delayed continuous-steering diagnostic measured **23.3ms**, with 20.5ms median / 26ms p95 frame intervals. These are browser instrumentation, not input-to-photon guarantees. Clock regression measured **60.06Hz**, 3.00s countdown, 2.00s direction preview and 5.00s results.
+- Corrected screenshots inspected at 1440×1000 and 1024×768: twelve original pickup icons, scrollable lobby legend, active effects and readable standings. Fixed a stale mode label, roster styling leaking into nested badges and laptop footer overflow. Browser assertions confirm the active-effect footer remains in the viewport and roster rows stay compact.
+- Eight-player headless Basic endurance: 36,000 steps across 81 rounds, peak 3,149 trail segments, 12 collected pickups, approximately **0.043ms p95 / 5.1ms max** in the final run alongside browser checks step on **Apple M4, macOS arm64**. Separately verified full ten-minute round timeout/reset with flight keeping players alive. These are synthetic simulation checks, not dense ten-minute arena, browser load, concurrent-room or hosted-capacity guarantees.
+
+## Current gameplay baseline
+
+Minimum field width 600, scaling to 900 at eight players and 1,559 at 24; speed 124.81755 units/s, turn radius 35 and trail width 5. Base speed includes the latest 15% increase. Desktop arena and controls fit beside the 280px room rail. Prediction is bounded at 16 ticks (267ms); local/remote clocks slew within ±5%, and small corrections decay over 60ms. Large corrections can still move a head; long stalls reach the prediction cap.
+
+## Run and handoff
+
+Use `corepack pnpm dev` and open http://localhost:5173 in two independent browser contexts. Choose the mode in the lobby and apply settings before readying. See README and [DEVELOPMENT](DEVELOPMENT.md) for build and verification commands. Test screenshots/traces stay in ignored `test-results/`. The temporary compiled smoke server was stopped after verification; start development servers with the command above.
+
+## Next concrete work / remaining limits
+
+1. Playtest the reduced drop density and shared countdown halos with friends. Balance values are intentionally explicit and adjustable in code.
+2. Measure eight real clients, dense long-round geometry/baseline size, concurrent rooms, extreme jitter/stalls and Firefox/Safari/Edge. Current multiplayer visual evidence is Chromium with two clients.
+3. Bound outbound queues and sync-request rates; exercise slow clients, full match/rematch endurance and context-loss recovery. Full refresh does not restore the guest seat.
+4. Validate Docker image/health check on a Docker host and implement graceful draining before hardened hosting claims. Public deployment remains a separate action.
+5. Reference flight/corner/wrap behavior and stacking limits remain unverified by live reference play. No exact parity claim. No accounts, discovery, teams, shared keyboard, dedicated spectators or recordings were added.
+
+The gameplay implementation is present; broader release milestones and production hardening remain incomplete.

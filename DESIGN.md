@@ -35,3 +35,7 @@ Preserve world coordinates and arena aspect ratio. Collapse the side rail struct
 ## Visual validation
 
 Inspect actual browser renders at desktop, small laptop and narrow mobile widths. The approved reference composition already establishes the visual direction; initial implementation uses that brief directly. Record screenshots/checks and defects in STATUS; do not claim visual QA from a build alone.
+
+## Power-up presentation
+
+Use original vector glyphs in ten-world-unit pickup discs. Green/self, red/opponents and blue/global have additional circle/diamond/double-bar scope marks. Cache SVG textures in Pixi. Every affected living player has a countdown halo visible to all clients. A single effect uses the full ring; multiple effect kinds divide it into separately draining sections with matching icons. Stacks show a count and time to the next expiry. Keep active effect names and numeric next-expiry timers beside steering controls, with compact symbols beside player standings. The host's fixed preset selector and a scrollable, keyboard-focusable disclosure explain effects in the lobby. Global wrapping outlines the arena; brief collection rings respect reduced motion. Width changes affect only new visible trails, matching collision geometry.
